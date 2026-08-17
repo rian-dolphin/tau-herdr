@@ -37,6 +37,8 @@ Notes:
 - `pane.report_agent_session` carries `agent_session_id`
   (`tau.context.session_id`) and `session_start_source` (the reason), so
   herdr can associate the pane with the Tau session.
+  When `session_id` is `None` we skip this call; we never send a null
+  id.
 - There is no `blocked` mapping in v0.1.
   Tau has no ask-user or permission event an extension can observe.
 
@@ -56,11 +58,26 @@ newline-delimited JSON request per call:
 - No subprocess spawn on the hot path: Tau dispatches extension handlers
   sequentially with no timeout, so a blocking `herdr` CLI call would
   stall the agent loop.
+- Handlers never await the socket.
+  Tau awaits every handler inline on the run's critical path, so a
+  0.5 s socket call in `agent_start` would delay run start and every
+  downstream listener.
+  Handlers enqueue a report; a single worker task sends them FIFO.
 - Timeout 0.5 s per call.
   Every call is wrapped in `except Exception`; a report never raises and
   never blocks a run.
-- `seq` is `time.time_ns()` at call time.
-  It is monotonic enough across restarts and needs no stored state.
+- `seq` is assigned at enqueue time as
+  `seq = max(last_seq + 1, time.time_ns())`.
+  The clock seed survives restarts; the increment keeps ordering strict
+  even inside one nanosecond tick.
+- On `session_shutdown` (every reason) the handler drains the queue
+  with a bounded wait (about 1 s).
+  The process exits right after `quit`, so a fire-and-forget release
+  would never be sent, and a queued `idle` arriving after the release
+  would resurrect the pane.
+- The worker holds only the env values and socket path.
+  It never touches the extension API or context, which go stale after
+  `/reload`.
 - `pane.release_agent` requires `pane_id`, `source`, and `agent`
   (verified against herdr 0.8.0; `agent` missing is an
   `invalid_request`).
@@ -73,18 +90,21 @@ newline-delimited JSON request per call:
 - If any is missing, `setup` returns without subscribing anything.
   Outside herdr the extension is inert: no warnings, no tools, no cost.
 - `TAU_HERDR_DISABLE=1` turns the extension off inside herdr.
-- `TAU_HERDR_AGENT_LABEL` overrides the reported agent label
-  (default `tau`).
+- The agent label is `TAU_HERDR_AGENT_LABEL`, else `HERDR_AGENT_LABEL`
+  (herdr can set this itself), else `tau`.
 
-If the environment says we are inside herdr but the first report cannot
-reach the socket, we notify once (`tau.notify(..., "warning")`) and keep
-trying on later events (fire-and-forget).
+If herdr's socket is unreachable we stay silent and keep trying on
+later events.
+A toast mid-run is not actionable; `/herdr` surfaces the failure
+instead.
 
 ## `/herdr` command
 
-`tau` has no status-line API for extensions, so a `/herdr` slash command
-replaces pi-herdr's footer: it prints pane/tab/workspace ids, the label,
+Tau has no status-line API for extensions, so a `/herdr` slash command
+replaces pi-herdr's footer: it returns the pane id, socket path, label,
 the last reported state, and whether the last report succeeded.
+The command handler is sync and returns the text
+(`register_command` shows it in a modal).
 
 ## Configuration
 
