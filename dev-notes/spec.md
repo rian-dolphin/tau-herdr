@@ -71,7 +71,7 @@ newline-delimited JSON request per call:
   The clock seed survives restarts; the increment keeps ordering strict
   even inside one nanosecond tick.
 - On `session_shutdown` (every reason) the handler drains the queue
-  with a bounded wait (about 1 s).
+  with a bounded wait (1 s, plus 0.5 s for the release call on `quit`).
   The process exits right after `quit`, so a fire-and-forget release
   would never be sent, and a queued `idle` arriving after the release
   would resurrect the pane.

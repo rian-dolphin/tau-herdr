@@ -21,9 +21,9 @@ classifiers = [
  "Programming Language :: Python :: 3.14",
 ]
 keywords = ["tau", "herdr", "extension", "agents", "terminal"]
-dependencies = [
- "tau-ai>=0.3.0",
-]
+# No runtime dependencies: Tau loads the extension inside its own
+# process, where the tau packages are already importable.
+dependencies = []
 
 [project.urls]
 Homepage = "https://github.com/rian-dolphin/tau-herdr"
@@ -31,7 +31,7 @@ Repository = "https://github.com/rian-dolphin/tau-herdr"
 Issues = "https://github.com/rian-dolphin/tau-herdr/issues"
 
 [dependency-groups]
-dev = ["pytest>=8.0", "anyio>=4.0"]
+dev = ["tau-ai>=0.3.0", "pytest>=8.0", "anyio>=4.0"]
 
 # Tau extension manifest: Tau loads this entry when the repo is passed
 # to `tau -e ./tau-herdr` or placed in an extensions directory.
@@ -40,3 +40,4 @@ extensions = ["src/tau_herdr/extension.py"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+pythonpath = ["src"]

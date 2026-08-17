@@ -59,7 +59,6 @@ class _Reporter:
         }
 
     def report_state(self, state: str) -> None:
-        self.last_state = state
         self._enqueue("pane.report_agent", self._base_params() | {"state": state})
 
     def report_session(self, session_id: str, *, reason: str) -> None:
@@ -80,6 +79,12 @@ class _Reporter:
             try:
                 response = await client.call(self._env.socket_path, method, params)
                 self.last_ok = response is not None and "error" not in response
+                if method == "pane.report_agent":
+                    self.last_state = str(params.get("state"))
+            except Exception:
+                # A dead worker would silence all future reports and log
+                # an unretrieved exception into the host's stderr.
+                self.last_ok = False
             finally:
                 self._queue.task_done()
 
@@ -95,8 +100,11 @@ class _Reporter:
         except (TimeoutError, asyncio.TimeoutError):
             pass
         if self._worker is not None:
-            self._worker.cancel()
-            self._worker = None
+            worker, self._worker = self._worker, None
+            worker.cancel()
+            # Await the cancellation: on `quit` the loop closes moments
+            # later and an un-awaited task logs "Task was destroyed".
+            await asyncio.gather(worker, return_exceptions=True)
         if release:
             params = {
                 "pane_id": self._env.pane_id,
@@ -142,22 +150,18 @@ def setup(tau: "ExtensionAPI") -> None:
             reporter.report_session(session_id, reason=event.reason)
 
     @tau.on("agent_start")
-    async def _on_agent_start(event, context: "ExtensionContext") -> None:
-        del event, context
+    async def _on_agent_start(_event, _context: "ExtensionContext") -> None:
         reporter.report_state("working")
 
     @tau.on("agent_settled")
-    async def _on_agent_settled(event, context: "ExtensionContext") -> None:
-        del event, context
+    async def _on_agent_settled(_event, _context: "ExtensionContext") -> None:
         reporter.report_state("idle")
 
     @tau.on("session_shutdown")
-    async def _on_session_shutdown(event, context: "ExtensionContext") -> None:
-        del context
+    async def _on_session_shutdown(event, _context: "ExtensionContext") -> None:
         await reporter.shutdown(release=event.reason == "quit")
 
-    def _herdr_command(args: str, context: "ExtensionCommandContext") -> str:
-        del args, context
+    def _herdr_command(_args: str, _context: "ExtensionCommandContext") -> str:
         return reporter.status_text()
 
     tau.register_command(

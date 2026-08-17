@@ -38,8 +38,8 @@ We do not spawn the `herdr` binary.
   Handlers only enqueue; a single worker task sends reports FIFO in the
   background, so a dead or slow herdr server costs the run nothing and
   never raises into Tau.
-  The only awaited path is the bounded (about 1 s) queue drain at
-  `session_shutdown`.
+  The only awaited path is the queue drain at `session_shutdown`,
+  bounded at 1 s plus 0.5 s for the release call on `quit`.
 - The client is about 40 lines instead of pi-herdr's 215-line CLI
   wrapper.
 - We depend on the socket protocol instead of the CLI surface.

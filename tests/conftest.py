@@ -21,6 +21,7 @@ class FakeHerdr:
     socket_path: str
     requests: list[dict] = field(default_factory=list)
     respond_error: bool = False
+    hang: bool = False
 
     def requests_for(self, method: str) -> list[dict]:
         return [r for r in self.requests if r.get("method") == method]
@@ -37,6 +38,8 @@ async def fake_herdr():
             while line := await reader.readline():
                 request = json.loads(line)
                 server_state.requests.append(request)
+                if server_state.hang:
+                    continue
                 if server_state.respond_error:
                     response = {
                         "id": request.get("id"),

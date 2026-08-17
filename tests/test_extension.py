@@ -1,10 +1,11 @@
 """Tests for the tau-herdr extension.
 
-Requires Tau's packages on the import path. With this repo's own env
-(tau resolved via the pyproject path source): `uv run pytest`. Or borrow
-a Tau checkout's env: `uv run --project /path/to/tau pytest tests/`.
+Requires Tau's packages on the import path: either
+`uv run pytest` (tau-ai from PyPI via the dev group) or a local Tau
+checkout's env: `uv run --project /path/to/tau pytest tests/`.
 """
 
+import time
 from pathlib import Path
 
 import pytest
@@ -184,10 +185,49 @@ async def test_socket_down_is_silent(tmp_path, monkeypatch):
     runtime = _load_runtime(
         tmp_path, monkeypatch, socket_path=str(tmp_path / "missing.sock")
     )
+    assert runtime.build_command_registry().get("herdr") is not None
     await runtime.emit_session_start("startup")
     await runtime.emit_event(AgentStartEvent())
     await runtime.emit_session_shutdown("quit")
     assert runtime.diagnostics == ()
+
+
+async def test_handlers_do_not_block_on_socket(tmp_path, monkeypatch, fake_herdr):
+    # The central transport claim: handlers only enqueue. A server that
+    # accepts but never replies must not stall event dispatch.
+    fake_herdr.hang = True
+    runtime = _load_runtime(tmp_path, monkeypatch, socket_path=fake_herdr.socket_path)
+    started = time.perf_counter()
+    await runtime.emit_session_start("startup")
+    await runtime.emit_event(AgentStartEvent())
+    await runtime.emit_event(AgentSettledEvent())
+    elapsed = time.perf_counter() - started
+    assert elapsed < 0.3
+    await runtime.emit_session_shutdown("quit")
+    assert runtime.diagnostics == ()
+
+
+async def test_reports_resume_after_reload(tmp_path, monkeypatch, fake_herdr):
+    runtime = _load_runtime(tmp_path, monkeypatch, socket_path=fake_herdr.socket_path)
+    await runtime.emit_session_start("startup")
+    await runtime.emit_session_shutdown("reload")
+    before = len(fake_herdr.requests_for("pane.report_agent"))
+
+    await runtime.emit_session_start("reload")
+    await runtime.emit_event(AgentStartEvent())
+    await runtime.emit_session_shutdown("quit")
+    assert runtime.diagnostics == ()
+    after = fake_herdr.requests_for("pane.report_agent")
+    assert [r["params"]["state"] for r in after[before:]] == ["idle", "working"]
+
+
+def test_next_seq_strictly_increases(monkeypatch):
+    from tau_herdr import extension as ext
+    from tau_herdr._env import HerdrEnv
+
+    monkeypatch.setattr(ext.time, "time_ns", lambda: 12345)
+    reporter = ext._Reporter(HerdrEnv(pane_id="p", socket_path="s", label="tau"))
+    assert [reporter._next_seq() for _ in range(3)] == [12345, 12346, 12347]
 
 
 async def test_herdr_command_reports_status(tmp_path, monkeypatch, fake_herdr):
