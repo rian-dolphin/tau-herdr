@@ -1,0 +1,42 @@
+[build-system]
+requires = ["uv_build>=0.11.26,<0.12"]
+build-backend = "uv_build"
+
+[project]
+name = "tau-herdr"
+version = "0.1.0"
+description = "herdr integration for Tau: report agent state to the herdr workspace manager."
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "Rian Dolphin", email = "dolphrian@gmail.com" }]
+requires-python = ">=3.12"
+classifiers = [
+ "Development Status :: 3 - Alpha",
+ "Intended Audience :: Developers",
+ "Operating System :: OS Independent",
+ "Programming Language :: Python :: 3",
+ "Programming Language :: Python :: 3.12",
+ "Programming Language :: Python :: 3.13",
+ "Programming Language :: Python :: 3.14",
+]
+keywords = ["tau", "herdr", "extension", "agents", "terminal"]
+dependencies = [
+ "tau-ai>=0.3.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/rian-dolphin/tau-herdr"
+Repository = "https://github.com/rian-dolphin/tau-herdr"
+Issues = "https://github.com/rian-dolphin/tau-herdr/issues"
+
+[dependency-groups]
+dev = ["pytest>=8.0", "anyio>=4.0"]
+
+# Tau extension manifest: Tau loads this entry when the repo is passed
+# to `tau -e ./tau-herdr` or placed in an extensions directory.
+[tool.tau]
+extensions = ["src/tau_herdr/extension.py"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
