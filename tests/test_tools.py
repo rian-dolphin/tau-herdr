@@ -11,6 +11,15 @@ pytestmark = pytest.mark.anyio
 _TIMEOUT = {"__error__": {"code": "timeout", "message": "wait timed out"}}
 
 
+def _load_with_tools(tmp_path, monkeypatch, socket_path):
+    return _load_runtime(
+        tmp_path,
+        monkeypatch,
+        socket_path=socket_path,
+        extra_env={"TAU_HERDR_TOOLS": "1"},
+    )
+
+
 def _tool(runtime, name):
     match = [t for t in runtime.extension_tools if t.name == name]
     assert match, f"tool {name} not registered"
@@ -55,11 +64,13 @@ def _agent(status, seq=1, **extra):
     }
 
 
-async def test_tools_registered_only_inside_herdr(tmp_path, monkeypatch, fake_herdr):
+async def test_tools_registered_only_when_opted_in(tmp_path, monkeypatch, fake_herdr):
     outside = _load_runtime(tmp_path, monkeypatch, socket_path=None)
     assert outside.extension_tools == ()
-    monkeypatch.undo()
-    inside = _load_runtime(tmp_path, monkeypatch, socket_path=fake_herdr.socket_path)
+    default = _load_runtime(tmp_path, monkeypatch, socket_path=fake_herdr.socket_path)
+    assert default.extension_tools == ()
+    assert default.prompt_guidelines == ()
+    inside = _load_with_tools(tmp_path, monkeypatch, fake_herdr.socket_path)
     names = {t.name for t in inside.extension_tools}
     assert "herdr_start_agent" in names
     assert "herdr_delegate" in names
@@ -70,7 +81,7 @@ async def test_tools_registered_only_inside_herdr(tmp_path, monkeypatch, fake_he
 
 
 async def test_start_agent_splits_then_starts(tmp_path, monkeypatch, fake_herdr):
-    runtime = _load_runtime(tmp_path, monkeypatch, socket_path=fake_herdr.socket_path)
+    runtime = _load_with_tools(tmp_path, monkeypatch, fake_herdr.socket_path)
     fake_herdr.script["pane.split"] = [
         {"type": "pane_info", "pane": {"pane_id": "w1:p9", "tab_id": "w1:t1"}}
     ]
@@ -93,7 +104,7 @@ async def test_start_agent_splits_then_starts(tmp_path, monkeypatch, fake_herdr)
 
 
 async def test_start_tau_agent_types_command(tmp_path, monkeypatch, fake_herdr):
-    runtime = _load_runtime(tmp_path, monkeypatch, socket_path=fake_herdr.socket_path)
+    runtime = _load_with_tools(tmp_path, monkeypatch, fake_herdr.socket_path)
     fake_herdr.script["pane.split"] = [
         {"type": "pane_info", "pane": {"pane_id": "w1:p9"}}
     ]
@@ -104,13 +115,13 @@ async def test_start_tau_agent_types_command(tmp_path, monkeypatch, fake_herdr):
 
 
 async def test_start_agent_rejects_uppercase_name(tmp_path, monkeypatch, fake_herdr):
-    runtime = _load_runtime(tmp_path, monkeypatch, socket_path=fake_herdr.socket_path)
+    runtime = _load_with_tools(tmp_path, monkeypatch, fake_herdr.socket_path)
     with pytest.raises(ValueError, match="lowercase"):
         await _run(runtime, "herdr_start_agent", {"kind": "claude", "name": "Helper"})
 
 
 async def test_send_prompt_submit_and_type(tmp_path, monkeypatch, fake_herdr):
-    runtime = _load_runtime(tmp_path, monkeypatch, socket_path=fake_herdr.socket_path)
+    runtime = _load_with_tools(tmp_path, monkeypatch, fake_herdr.socket_path)
     await _run(runtime, "herdr_send_prompt", {"target": "helper", "text": "hi"})
     assert fake_herdr.requests_for("agent.prompt")[0]["params"] == {
         "target": "helper",
@@ -129,7 +140,7 @@ async def test_send_prompt_submit_and_type(tmp_path, monkeypatch, fake_herdr):
 
 async def test_send_prompt_falls_back_to_typing(tmp_path, monkeypatch, fake_herdr):
     # Self-reported panes (spawned tau) reject agent.prompt.
-    runtime = _load_runtime(tmp_path, monkeypatch, socket_path=fake_herdr.socket_path)
+    runtime = _load_with_tools(tmp_path, monkeypatch, fake_herdr.socket_path)
     fake_herdr.script["agent.prompt"] = [
         {"__error__": {"code": "agent_not_ready", "message": "not an active named agent"}}
     ]
@@ -143,7 +154,7 @@ async def test_send_prompt_falls_back_to_typing(tmp_path, monkeypatch, fake_herd
 
 
 async def test_wait_agent_times_out_with_status(tmp_path, monkeypatch, fake_herdr):
-    runtime = _load_runtime(tmp_path, monkeypatch, socket_path=fake_herdr.socket_path)
+    runtime = _load_with_tools(tmp_path, monkeypatch, fake_herdr.socket_path)
     fake_herdr.defaults["agent.wait"] = _TIMEOUT
     fake_herdr.defaults["agent.get"] = _agent("working")
     with pytest.raises(ValueError, match="working"):
@@ -155,7 +166,7 @@ async def test_wait_agent_times_out_with_status(tmp_path, monkeypatch, fake_herd
 
 
 async def test_wait_agent_chunks_long_waits(tmp_path, monkeypatch, fake_herdr):
-    runtime = _load_runtime(tmp_path, monkeypatch, socket_path=fake_herdr.socket_path)
+    runtime = _load_with_tools(tmp_path, monkeypatch, fake_herdr.socket_path)
     fake_herdr.script["agent.wait"] = [_TIMEOUT, _TIMEOUT, _agent("idle")]
     text, _ = await _run(
         runtime, "herdr_wait_agent", {"target": "w1:p9", "timeout_ms": 60_000}
@@ -167,7 +178,7 @@ async def test_wait_agent_chunks_long_waits(tmp_path, monkeypatch, fake_herdr):
 
 
 async def test_wait_agent_polls_cancellation(tmp_path, monkeypatch, fake_herdr):
-    runtime = _load_runtime(tmp_path, monkeypatch, socket_path=fake_herdr.socket_path)
+    runtime = _load_with_tools(tmp_path, monkeypatch, fake_herdr.socket_path)
     fake_herdr.defaults["agent.wait"] = _TIMEOUT
     with pytest.raises(ValueError, match="cancelled"):
         await _run(
@@ -179,7 +190,7 @@ async def test_wait_agent_polls_cancellation(tmp_path, monkeypatch, fake_herdr):
 
 
 async def test_read_agent_maps_source_spelling(tmp_path, monkeypatch, fake_herdr):
-    runtime = _load_runtime(tmp_path, monkeypatch, socket_path=fake_herdr.socket_path)
+    runtime = _load_with_tools(tmp_path, monkeypatch, fake_herdr.socket_path)
     fake_herdr.script["agent.read"] = [
         {"type": "pane_read", "read": {"text": "hello"}}
     ]
@@ -194,7 +205,7 @@ async def test_read_agent_maps_source_spelling(tmp_path, monkeypatch, fake_herdr
 
 
 async def test_close_pane_resolves_agent_target(tmp_path, monkeypatch, fake_herdr):
-    runtime = _load_runtime(tmp_path, monkeypatch, socket_path=fake_herdr.socket_path)
+    runtime = _load_with_tools(tmp_path, monkeypatch, fake_herdr.socket_path)
     fake_herdr.defaults["agent.get"] = _agent("idle")
     await _run(runtime, "herdr_close_pane", {"target": "helper"})
     assert fake_herdr.requests_for("pane.close")[0]["params"] == {"pane_id": "w1:p9"}
@@ -203,7 +214,7 @@ async def test_close_pane_resolves_agent_target(tmp_path, monkeypatch, fake_herd
 
 
 async def test_run_command_presses_enter(tmp_path, monkeypatch, fake_herdr):
-    runtime = _load_runtime(tmp_path, monkeypatch, socket_path=fake_herdr.socket_path)
+    runtime = _load_with_tools(tmp_path, monkeypatch, fake_herdr.socket_path)
     await _run(
         runtime, "herdr_run_command", {"pane_id": "w1:p2", "command": "make test"}
     )
@@ -215,7 +226,7 @@ async def test_run_command_presses_enter(tmp_path, monkeypatch, fake_herdr):
 
 
 async def test_wait_output_needs_exactly_one_matcher(tmp_path, monkeypatch, fake_herdr):
-    runtime = _load_runtime(tmp_path, monkeypatch, socket_path=fake_herdr.socket_path)
+    runtime = _load_with_tools(tmp_path, monkeypatch, fake_herdr.socket_path)
     with pytest.raises(ValueError, match="exactly one"):
         await _run(runtime, "herdr_wait_output", {"pane_id": "w1:p2"})
     with pytest.raises(ValueError, match="exactly one"):
@@ -236,7 +247,7 @@ async def test_wait_output_needs_exactly_one_matcher(tmp_path, monkeypatch, fake
 
 
 async def test_layout_dispatch_and_validation(tmp_path, monkeypatch, fake_herdr):
-    runtime = _load_runtime(tmp_path, monkeypatch, socket_path=fake_herdr.socket_path)
+    runtime = _load_with_tools(tmp_path, monkeypatch, fake_herdr.socket_path)
     await _run(runtime, "herdr_layout", {"action": "create_tab", "label": "build"})
     assert fake_herdr.requests_for("tab.create")[0]["params"] == {
         "label": "build",
@@ -251,7 +262,7 @@ async def test_layout_dispatch_and_validation(tmp_path, monkeypatch, fake_herdr)
 
 
 async def test_worktree_create_and_remove(tmp_path, monkeypatch, fake_herdr):
-    runtime = _load_runtime(tmp_path, monkeypatch, socket_path=fake_herdr.socket_path)
+    runtime = _load_with_tools(tmp_path, monkeypatch, fake_herdr.socket_path)
     fake_herdr.script["worktree.create"] = [
         {
             "type": "worktree_created",
@@ -268,7 +279,7 @@ async def test_worktree_create_and_remove(tmp_path, monkeypatch, fake_herdr):
 
 
 async def test_notify(tmp_path, monkeypatch, fake_herdr):
-    runtime = _load_runtime(tmp_path, monkeypatch, socket_path=fake_herdr.socket_path)
+    runtime = _load_with_tools(tmp_path, monkeypatch, fake_herdr.socket_path)
     await _run(runtime, "herdr_notify", {"title": "Done", "sound": "done"})
     assert fake_herdr.requests_for("notification.show")[0]["params"] == {
         "title": "Done",
@@ -277,7 +288,7 @@ async def test_notify(tmp_path, monkeypatch, fake_herdr):
 
 
 async def test_herdr_error_is_model_readable(tmp_path, monkeypatch, fake_herdr):
-    runtime = _load_runtime(tmp_path, monkeypatch, socket_path=fake_herdr.socket_path)
+    runtime = _load_with_tools(tmp_path, monkeypatch, fake_herdr.socket_path)
     fake_herdr.script["agent.get"] = [
         {"__error__": {"code": "agent_not_found", "message": "no agent 'ghost'"}}
     ]
@@ -287,7 +298,7 @@ async def test_herdr_error_is_model_readable(tmp_path, monkeypatch, fake_herdr):
 
 
 async def test_delegate_happy_path(tmp_path, monkeypatch, fake_herdr):
-    runtime = _load_runtime(tmp_path, monkeypatch, socket_path=fake_herdr.socket_path)
+    runtime = _load_with_tools(tmp_path, monkeypatch, fake_herdr.socket_path)
     _patch_delegate_speed(monkeypatch)
     fake_herdr.script["pane.split"] = [
         {"type": "pane_info", "pane": {"pane_id": "w1:p9"}}
@@ -312,7 +323,7 @@ async def test_delegate_happy_path(tmp_path, monkeypatch, fake_herdr):
 
 
 async def test_delegate_reprompts_when_stalled(tmp_path, monkeypatch, fake_herdr):
-    runtime = _load_runtime(tmp_path, monkeypatch, socket_path=fake_herdr.socket_path)
+    runtime = _load_with_tools(tmp_path, monkeypatch, fake_herdr.socket_path)
     _patch_delegate_speed(monkeypatch)
     fake_herdr.script["pane.split"] = [
         {"type": "pane_info", "pane": {"pane_id": "w1:p9"}}
@@ -337,7 +348,7 @@ async def test_chunked_wait_surfaces_fast_timeout_codes(
 ):
     # An instantly returned error whose code merely contains "timeout"
     # is a real failure, not a chunk timeout; it must not hot-loop.
-    runtime = _load_runtime(tmp_path, monkeypatch, socket_path=fake_herdr.socket_path)
+    runtime = _load_with_tools(tmp_path, monkeypatch, fake_herdr.socket_path)
     fake_herdr.defaults["agent.wait"] = {
         "__error__": {"code": "invalid_timeout_ms", "message": "bad timeout"}
     }
@@ -351,7 +362,7 @@ async def test_chunked_wait_surfaces_fast_timeout_codes(
 async def test_delegate_on_blocked_wait_reads_final_answer(
     tmp_path, monkeypatch, fake_herdr
 ):
-    runtime = _load_runtime(tmp_path, monkeypatch, socket_path=fake_herdr.socket_path)
+    runtime = _load_with_tools(tmp_path, monkeypatch, fake_herdr.socket_path)
     _patch_delegate_speed(monkeypatch)
     fake_herdr.script["pane.split"] = [
         {"type": "pane_info", "pane": {"pane_id": "w1:p9"}}
@@ -384,7 +395,7 @@ async def test_delegate_tau_tolerates_late_self_report(
 ):
     # A spawned tau pane is invisible to herdr until its self-report
     # lands; the boot gate must ride out agent_not_found.
-    runtime = _load_runtime(tmp_path, monkeypatch, socket_path=fake_herdr.socket_path)
+    runtime = _load_with_tools(tmp_path, monkeypatch, fake_herdr.socket_path)
     _patch_delegate_speed(monkeypatch)
     fake_herdr.script["pane.split"] = [
         {"type": "pane_info", "pane": {"pane_id": "w1:p9"}}
@@ -407,7 +418,7 @@ async def test_delegate_tau_tolerates_late_self_report(
 
 
 async def test_delegate_blocked_returns_question(tmp_path, monkeypatch, fake_herdr):
-    runtime = _load_runtime(tmp_path, monkeypatch, socket_path=fake_herdr.socket_path)
+    runtime = _load_with_tools(tmp_path, monkeypatch, fake_herdr.socket_path)
     _patch_delegate_speed(monkeypatch)
     fake_herdr.script["pane.split"] = [
         {"type": "pane_info", "pane": {"pane_id": "w1:p9"}}

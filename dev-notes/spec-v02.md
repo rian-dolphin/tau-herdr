@@ -156,10 +156,10 @@ wait branch only matters when delegating to other agent kinds.
 
 ## Registration
 
-Tools register in `setup()` only when the herdr env gate passes —
-outside herdr Tau's prompt carries zero herdr tools.
-One prompt guideline is added describing when to reach for herdr
-tools.
+Amended by ADR 0005: tools (and the one prompt guideline) register
+only when `TAU_HERDR_TOOLS=1` *and* the herdr env gate passes.
+By default the extension adds nothing to the prompt; orchestration
+ships as the `herdr` skill (`skills/herdr/SKILL.md`).
 
 ## Deferred to v0.3+
 

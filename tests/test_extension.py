@@ -210,7 +210,9 @@ def test_next_seq_strictly_increases(monkeypatch):
     from tau_herdr._env import HerdrEnv
 
     monkeypatch.setattr(ext.time, "time_ns", lambda: 12345)
-    reporter = ext._Reporter(HerdrEnv(pane_id="p", socket_path="s", label="tau"))
+    reporter = ext._Reporter(
+        HerdrEnv(pane_id="p", socket_path="s", label="tau", tools_enabled=False)
+    )
     assert [reporter._next_seq() for _ in range(3)] == [12345, 12346, 12347]
 
 

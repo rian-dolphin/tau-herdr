@@ -47,36 +47,38 @@ starts reporting. The `/herdr` slash command shows the integration
 status: pane id, socket path, label, the last reported state, and
 whether the last report reached herdr.
 
-## Orchestration tools
+## Orchestration: the `herdr` skill
 
-Inside herdr, Tau also gets 22 `herdr_*` tools (names follow
-[pi-herdr](https://github.com/AndrewJacop/pi-herdr) where an
-equivalent exists):
+By default the extension adds **nothing** to Tau's system prompt — no
+tools, no guidelines. Orchestration is on demand, as a skill
+(one name+description line in the prompt, full content only when
+used):
 
-- **Agents** — `herdr_start_agent`, `herdr_send_prompt`,
-  `herdr_wait_agent`, `herdr_read_agent`, `herdr_list_agents`,
-  `herdr_get_agent`, `herdr_rename_agent`, `herdr_focus_agent`,
-  `herdr_close_pane`: spawn claude/codex/gemini/…/tau agents in panes,
-  prompt them, wait for them, and read their output.
-- **`herdr_delegate`** — one shot: spawn an agent, prompt it, wait,
-  return its answer. If the delegate asks a question, the tool errors
-  with the question so Tau can relay it (or pass
-  `on_blocked: "wait"`).
-- **Pane sync** — `herdr_split_pane`, `herdr_run_command`,
-  `herdr_read_pane`, `herdr_wait_output`, `herdr_send_keys`: raw
-  terminals for builds, servers, and logs.
-- **`herdr_layout`** — one multiplexer for pane/tab/workspace
-  management (list, create, focus, rename, move, close).
-- **Worktrees** — `herdr_worktree_create/open/list/remove`: parallel
-  git checkouts opened as herdr workspaces.
-- **`herdr_api_snapshot`**, **`herdr_notify`** — live session
-  introspection and user notifications.
+```bash
+ln -s /path/to/tau-herdr/skills/herdr ~/.tau/skills/herdr
+```
 
-Everything talks straight to the herdr socket (protocol 19, herdr
-≥ 0.8.0). Long waits are chunked so pressing Esc in Tau interrupts
-them promptly. Ask Tau things like: *"spawn a claude agent in a new
-worktree for the auth-refactor branch, have it run the tests, and
-notify me when it's done."*
+Then invoke it with `/skill:herdr` (or just ask — *"use the herdr
+skill to spawn a claude agent in a new worktree, run the tests, and
+notify me when it's done"*). The skill teaches Tau to drive the
+`herdr` CLI from the shell: spawning and prompting agents in panes,
+running commands in separate terminals, worktrees, and notifications —
+including the tau-specific edges (there is no `tau` agent kind, and
+self-reported panes need typed prompts).
+
+### Optional: native tools
+
+`TAU_HERDR_TOOLS=1` registers 22 `herdr_*` tools instead (names
+follow [pi-herdr](https://github.com/AndrewJacop/pi-herdr)): the
+agent surface (`herdr_start_agent`, `herdr_send_prompt`,
+`herdr_wait_agent`, `herdr_read_agent`, …), `herdr_delegate`
+(spawn → prompt → wait → answer, with blocked-question handling),
+pane sync (`herdr_run_command`, `herdr_wait_output`, …), the
+`herdr_layout` multiplexer, worktrees, `herdr_api_snapshot`, and
+`herdr_notify`. They talk straight to the herdr socket (protocol 19,
+herdr ≥ 0.8.0) with chunked, Esc-responsive waits — sturdier than CLI
+calls for heavy orchestration, at the cost of the tool schemas in
+every turn's prompt.
 
 ## Configuration
 
@@ -85,6 +87,7 @@ Environment variables only:
 | Variable | Effect |
 | --- | --- |
 | `TAU_HERDR_DISABLE=1` | disable the extension |
+| `TAU_HERDR_TOOLS=1` | register the native tool surface (default: off; use the skill) |
 | `TAU_HERDR_AGENT_LABEL` | reported agent label (default: `HERDR_AGENT_LABEL`, else `tau`) |
 
 ## Development

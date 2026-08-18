@@ -146,11 +146,16 @@ def setup(tau: "ExtensionAPI") -> None:
         return
     reporter = _Reporter(env)
 
-    from .tools import PROMPT_GUIDELINE, build_all_tools
+    # By default the extension is invisible to the model: no tools, no
+    # prompt guideline. Orchestration lives in the `herdr` skill
+    # (/skill:herdr); TAU_HERDR_TOOLS=1 opts into the native tool
+    # surface instead (ADR 0005).
+    if env.tools_enabled:
+        from .tools import PROMPT_GUIDELINE, build_all_tools
 
-    for herdr_tool in build_all_tools(env):
-        tau.register_tool(herdr_tool)
-    tau.add_prompt_guideline(PROMPT_GUIDELINE)
+        for herdr_tool in build_all_tools(env):
+            tau.register_tool(herdr_tool)
+        tau.add_prompt_guideline(PROMPT_GUIDELINE)
 
     tracker = BadgeTracker()
 
