@@ -74,6 +74,14 @@ def _load_runtime(
     return runtime
 
 
+async def test_invisible_to_the_model_by_default(tmp_path, monkeypatch, fake_herdr):
+    # The extension must add no tools and no prompt guidelines (ADR 0006).
+    runtime = _load_runtime(tmp_path, monkeypatch, socket_path=fake_herdr.socket_path)
+    assert runtime.extension_tools == ()
+    assert runtime.prompt_guidelines == ()
+    assert runtime.diagnostics == ()
+
+
 async def test_dormant_outside_herdr(tmp_path, monkeypatch):
     runtime = _load_runtime(tmp_path, monkeypatch, socket_path=None)
     assert runtime.extension_names == ("tau_herdr",)
@@ -210,9 +218,7 @@ def test_next_seq_strictly_increases(monkeypatch):
     from tau_herdr._env import HerdrEnv
 
     monkeypatch.setattr(ext.time, "time_ns", lambda: 12345)
-    reporter = ext._Reporter(
-        HerdrEnv(pane_id="p", socket_path="s", label="tau", tools_enabled=False)
-    )
+    reporter = ext._Reporter(HerdrEnv(pane_id="p", socket_path="s", label="tau"))
     assert [reporter._next_seq() for _ in range(3)] == [12345, 12346, 12347]
 
 

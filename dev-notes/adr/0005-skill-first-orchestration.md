@@ -4,9 +4,8 @@ title: "ADR 0005 — Orchestration is a skill by default, tools are opt-in"
 
 ## Status
 
-Accepted
-(Amends ADR 0003: the tool surface remains, but it no longer
-registers by default.)
+Accepted; the `TAU_HERDR_TOOLS` opt-in is superseded by ADR 0006
+(the tool surface is removed entirely).
 
 ## Context
 

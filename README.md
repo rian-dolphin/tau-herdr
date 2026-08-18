@@ -66,19 +66,10 @@ running commands in separate terminals, worktrees, and notifications —
 including the tau-specific edges (there is no `tau` agent kind, and
 self-reported panes need typed prompts).
 
-### Optional: native tools
-
-`TAU_HERDR_TOOLS=1` registers 22 `herdr_*` tools instead (names
-follow [pi-herdr](https://github.com/AndrewJacop/pi-herdr)): the
-agent surface (`herdr_start_agent`, `herdr_send_prompt`,
-`herdr_wait_agent`, `herdr_read_agent`, …), `herdr_delegate`
-(spawn → prompt → wait → answer, with blocked-question handling),
-pane sync (`herdr_run_command`, `herdr_wait_output`, …), the
-`herdr_layout` multiplexer, worktrees, `herdr_api_snapshot`, and
-`herdr_notify`. They talk straight to the herdr socket (protocol 19,
-herdr ≥ 0.8.0) with chunked, Esc-responsive waits — sturdier than CLI
-calls for heavy orchestration, at the cost of the tool schemas in
-every turn's prompt.
+An earlier version shipped the orchestration surface as 22 native
+tools; it was removed to keep one maintainable path (see
+`dev-notes/adr/0006`). The last release with it is tag
+[`v0.4.0`](https://github.com/rian-dolphin/tau-herdr/tree/v0.4.0).
 
 ## Configuration
 
@@ -87,7 +78,6 @@ Environment variables only:
 | Variable | Effect |
 | --- | --- |
 | `TAU_HERDR_DISABLE=1` | disable the extension |
-| `TAU_HERDR_TOOLS=1` | register the native tool surface (default: off; use the skill) |
 | `TAU_HERDR_AGENT_LABEL` | reported agent label (default: `HERDR_AGENT_LABEL`, else `tau`) |
 
 ## Development

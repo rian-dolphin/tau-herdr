@@ -13,7 +13,6 @@ class HerdrEnv:
     pane_id: str
     socket_path: str
     label: str
-    tools_enabled: bool
 
     @classmethod
     def from_environ(cls, environ: Mapping[str, str]) -> "HerdrEnv | None":
@@ -32,9 +31,4 @@ class HerdrEnv:
             or environ.get("HERDR_AGENT_LABEL")
             or "tau"
         )
-        return cls(
-            pane_id=pane_id,
-            socket_path=socket_path,
-            label=label,
-            tools_enabled=environ.get("TAU_HERDR_TOOLS") == "1",
-        )
+        return cls(pane_id=pane_id, socket_path=socket_path, label=label)

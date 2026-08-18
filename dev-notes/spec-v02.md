@@ -1,5 +1,10 @@
 # tau-herdr specification (v0.2 — orchestration tools)
 
+> **Historical.** The tool surface was removed in v0.5 (ADR 0006);
+> the last release with it is tag `v0.4.0`. The herdr behaviors
+> verified here (prompt fallback, wait semantics, kind list) still
+> hold and now inform `skills/herdr/SKILL.md`.
+
 Read `spec.md` (v0.1, self-report) first.
 v0.2 adds LLM-facing tools that let the Tau agent drive herdr:
 spawn and prompt other agents, run commands in panes, manage layout,

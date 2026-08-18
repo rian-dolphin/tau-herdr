@@ -4,9 +4,8 @@ title: "ADR 0003 — v0.2 orchestration tools: socket transport, 22 tools, multi
 
 ## Status
 
-Accepted
-(Supersedes the deferral in ADR 0001; the self-report scope decision
-there still stands.)
+Superseded by ADR 0006 (the tool surface is removed; the transport
+and design records remain accurate for tag v0.4.0).
 
 ## Context
 

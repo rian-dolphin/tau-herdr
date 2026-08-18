@@ -20,7 +20,6 @@ HERDR_ENV_VARS = (
     "HERDR_SOCKET_PATH",
     "HERDR_AGENT_LABEL",
     "TAU_HERDR_DISABLE",
-    "TAU_HERDR_TOOLS",
     "TAU_HERDR_AGENT_LABEL",
 )
 
@@ -34,30 +33,17 @@ def _clean_herdr_env(monkeypatch: pytest.MonkeyPatch) -> None:
 
 @dataclass
 class FakeHerdr:
-    """A fake herdr socket server that records every request.
-
-    `script[method]` is a FIFO of result payloads consumed one per
-    request; `defaults[method]` answers when the queue is empty; the
-    fallback is `{"type": "ok"}`. A payload of `{"__error__": {...}}`
-    becomes an error envelope.
-    """
+    """A fake herdr socket server that records every request."""
 
     socket_path: str
     requests: list[dict] = field(default_factory=list)
-    script: dict[str, list[dict]] = field(default_factory=dict)
-    defaults: dict[str, dict] = field(default_factory=dict)
     hang: bool = False
 
     def requests_for(self, method: str) -> list[dict]:
         return [r for r in self.requests if r.get("method") == method]
 
     def respond(self, request: dict) -> dict:
-        method = request.get("method", "")
-        queue = self.script.get(method)
-        payload = queue.pop(0) if queue else self.defaults.get(method, {"type": "ok"})
-        if "__error__" in payload:
-            return {"id": request.get("id"), "error": payload["__error__"]}
-        return {"id": request.get("id"), "result": payload}
+        return {"id": request.get("id"), "result": {"type": "ok"}}
 
 
 @pytest.fixture
