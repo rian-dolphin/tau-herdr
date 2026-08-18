@@ -2,8 +2,8 @@
 
 A [Tau](https://twotimespi.dev) extension that integrates with
 [herdr](https://herdr.dev), the terminal workspace manager for AI
-coding agents: it reports Tau's state to herdr, and gives Tau a tool
-surface to orchestrate the rest of the workspace.
+coding agents: it reports Tau's state to herdr, and ships a skill for
+orchestrating the rest of the workspace.
 
 herdr cannot detect Tau natively — a Tau pane normally shows up as a
 plain terminal. With this extension the pane appears in

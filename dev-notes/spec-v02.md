@@ -165,6 +165,8 @@ Amended by ADR 0005: tools (and the one prompt guideline) register
 only when `TAU_HERDR_TOOLS=1` *and* the herdr env gate passes.
 By default the extension adds nothing to the prompt; orchestration
 ships as the `herdr` skill (`skills/herdr/SKILL.md`).
+Superseded by ADR 0006: nothing registers; the tool surface is
+removed.
 
 ## Deferred to v0.3+
 

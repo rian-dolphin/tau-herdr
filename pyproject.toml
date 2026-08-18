@@ -5,7 +5,7 @@ build-backend = "uv_build"
 [project]
 name = "tau-herdr"
 version = "0.5.0"
-description = "herdr integration for Tau: agent state reporting, pane badges, and workspace orchestration tools."
+description = "herdr integration for Tau: agent state reporting, pane badges, and an orchestration skill."
 readme = "README.md"
 license = "MIT"
 license-files = ["LICENSE"]
