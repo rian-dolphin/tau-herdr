@@ -317,6 +317,80 @@ async def test_delegate_reprompts_when_stalled(tmp_path, monkeypatch, fake_herdr
     assert len(fake_herdr.requests_for("agent.prompt")) == 2
 
 
+async def test_chunked_wait_surfaces_fast_timeout_codes(
+    tmp_path, monkeypatch, fake_herdr
+):
+    # An instantly returned error whose code merely contains "timeout"
+    # is a real failure, not a chunk timeout; it must not hot-loop.
+    runtime = _load_runtime(tmp_path, monkeypatch, socket_path=fake_herdr.socket_path)
+    fake_herdr.defaults["agent.wait"] = {
+        "__error__": {"code": "invalid_timeout_ms", "message": "bad timeout"}
+    }
+    with pytest.raises(Exception, match="bad timeout"):
+        await _run(
+            runtime, "herdr_wait_agent", {"target": "w1:p9", "timeout_ms": 60_000}
+        )
+    assert len(fake_herdr.requests_for("agent.wait")) == 1
+
+
+async def test_delegate_on_blocked_wait_reads_final_answer(
+    tmp_path, monkeypatch, fake_herdr
+):
+    runtime = _load_runtime(tmp_path, monkeypatch, socket_path=fake_herdr.socket_path)
+    _patch_delegate_speed(monkeypatch)
+    fake_herdr.script["pane.split"] = [
+        {"type": "pane_info", "pane": {"pane_id": "w1:p9"}}
+    ]
+    fake_herdr.script["agent.start"] = [{"type": "agent_started", "agent": {}}]
+    fake_herdr.script["agent.wait"] = [
+        _agent("idle", 1),  # boot
+        _agent("blocked", 3),  # first settle
+        _agent("idle", 4),  # blocked-wait loop resolves
+    ]
+    fake_herdr.script["agent.get"] = [
+        _agent("idle", 1),
+        _agent("working", 2),
+        _agent("blocked", 3),  # final status check finds blocked
+    ]
+    fake_herdr.script["agent.read"] = [
+        {"type": "pane_read", "read": {"text": "final answer"}}
+    ]
+    text, details = await _run(
+        runtime,
+        "herdr_delegate",
+        {"kind": "claude", "prompt": "go", "on_blocked": "wait"},
+    )
+    assert text == "final answer"
+    assert details["status"] == "idle"
+
+
+async def test_delegate_tau_tolerates_late_self_report(
+    tmp_path, monkeypatch, fake_herdr
+):
+    # A spawned tau pane is invisible to herdr until its self-report
+    # lands; the boot gate must ride out agent_not_found.
+    runtime = _load_runtime(tmp_path, monkeypatch, socket_path=fake_herdr.socket_path)
+    _patch_delegate_speed(monkeypatch)
+    fake_herdr.script["pane.split"] = [
+        {"type": "pane_info", "pane": {"pane_id": "w1:p9"}}
+    ]
+    fake_herdr.script["agent.wait"] = [
+        {"__error__": {"code": "agent_not_found", "message": "no agent"}},
+        _agent("idle", 1),  # boot succeeds once self-report lands
+        _agent("idle", 3),  # settle
+    ]
+    fake_herdr.script["agent.get"] = [
+        _agent("idle", 1),
+        _agent("working", 2),
+        _agent("idle", 3),
+    ]
+    fake_herdr.script["agent.read"] = [{"type": "pane_read", "read": {"text": "hi"}}]
+    text, _ = await _run(runtime, "herdr_delegate", {"kind": "tau", "prompt": "go"})
+    assert text == "hi"
+    assert fake_herdr.requests_for("pane.send_input")[0]["params"]["text"] == "tau"
+    assert fake_herdr.requests_for("agent.start") == []
+
+
 async def test_delegate_blocked_returns_question(tmp_path, monkeypatch, fake_herdr):
     runtime = _load_runtime(tmp_path, monkeypatch, socket_path=fake_herdr.socket_path)
     _patch_delegate_speed(monkeypatch)

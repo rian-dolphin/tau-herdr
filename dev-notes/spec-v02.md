@@ -34,6 +34,11 @@ Verified live against herdr 0.8.0 (protocol 19):
   the spawned Tau's own self-report (v0.1) makes it visible.
 - Socket read `source` values use underscores (`recent_unwrapped`);
   we expose the CLI spelling (`recent-unwrapped`) and map on the wire.
+- `agent.wait` returns immediately when the status is already
+  satisfied, its success payload is `agent_info` (`{"agent": {...}}`),
+  and its timeout is an error envelope with code `timeout` (all three
+  verified against the live server; the bundled schema's
+  `wait_matched` shape belongs to `events.wait`).
 
 ## Cancellation and long waits
 
@@ -123,8 +128,13 @@ optionally close the pane.
 1. Start (as `herdr_start_agent`).
 2. Boot gate: chunked `agent.wait` until `idle`, budget 90 s;
    then a 1.5 s settle sleep so the TUI input is ready.
-3. Prompt: `agent.prompt` with server-side wait, chunked.
-   On an `agent_prompt_stalled` error, re-send, at most 3 attempts.
+3. Prompt: `agent.prompt` (bare submit), then verify it landed: an
+   unchanged `state_change_seq` with an idle status for the whole 5 s
+   stall window means the prompt was lost; re-send, at most 3
+   attempts.
+   (pi-herdr's `agent_prompt_stalled` error only exists on its
+   prompt-with-wait path; seq-based detection replaces it here and
+   also survives fast agents that finish within the poll interval.)
 4. Read: `agent.read` (`recent`, 50 lines, text).
 5. Blocked check via `agent.get`:
    - `on_blocked: "return"` (default): return

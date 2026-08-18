@@ -4,37 +4,24 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 
+from tau_coding.tools import ToolInputError
+
 from .. import client
 from .._env import HerdrEnv
 from ._base import READ_TIMEOUT, TRIVIAL_TIMEOUT, json_result, opt, require_str, tool
 
-# action -> (method, required argument names, param builder)
-_ACTIONS: dict[str, object] = {}
-
-
-def _action(name):
-    def register(fn):
-        _ACTIONS[name] = fn
-        return fn
-
-    return register
-
-
-@_action("list_panes")
 def _list_panes(a: Mapping[str, object]) -> tuple[str, dict[str, object]]:
     return "pane.list", opt(a, "workspace_id")
 
 
-@_action("get_pane")
 def _get_pane(a):
     return "pane.get", {"pane_id": require_str(a, "pane_id")}
 
 
-@_action("move_pane")
 def _move_pane(a):
     destination = a.get("destination")
     if not isinstance(destination, dict) or "type" not in destination:
-        raise ValueError(
+        raise ToolInputError(
             "move_pane needs 'destination', e.g. "
             '{"type": "tab", "tab_id": "w1:t2", "split": "right"}, '
             '{"type": "new_tab"}, or {"type": "new_workspace"}'
@@ -46,24 +33,20 @@ def _move_pane(a):
     }
 
 
-@_action("list_tabs")
 def _list_tabs(a):
     return "tab.list", opt(a, "workspace_id")
 
 
-@_action("create_tab")
 def _create_tab(a):
     return "tab.create", opt(a, "cwd", "label", "workspace_id") | {
         "focus": bool(a.get("focus", False))
     }
 
 
-@_action("focus_tab")
 def _focus_tab(a):
     return "tab.focus", {"tab_id": require_str(a, "tab_id")}
 
 
-@_action("rename_tab")
 def _rename_tab(a):
     return "tab.rename", {
         "tab_id": require_str(a, "tab_id"),
@@ -71,29 +54,24 @@ def _rename_tab(a):
     }
 
 
-@_action("close_tab")
 def _close_tab(a):
     return "tab.close", {"tab_id": require_str(a, "tab_id")}
 
 
-@_action("list_workspaces")
 def _list_workspaces(a):
     return "workspace.list", {}
 
 
-@_action("create_workspace")
 def _create_workspace(a):
     return "workspace.create", opt(a, "cwd", "label") | {
         "focus": bool(a.get("focus", False))
     }
 
 
-@_action("focus_workspace")
 def _focus_workspace(a):
     return "workspace.focus", {"workspace_id": require_str(a, "workspace_id")}
 
 
-@_action("rename_workspace")
 def _rename_workspace(a):
     return "workspace.rename", {
         "workspace_id": require_str(a, "workspace_id"),
@@ -101,9 +79,26 @@ def _rename_workspace(a):
     }
 
 
-@_action("close_workspace")
 def _close_workspace(a):
     return "workspace.close", {"workspace_id": require_str(a, "workspace_id")}
+
+
+# action -> builder returning (socket method, params)
+_ACTIONS = {
+    "list_panes": _list_panes,
+    "get_pane": _get_pane,
+    "move_pane": _move_pane,
+    "list_tabs": _list_tabs,
+    "create_tab": _create_tab,
+    "focus_tab": _focus_tab,
+    "rename_tab": _rename_tab,
+    "close_tab": _close_tab,
+    "list_workspaces": _list_workspaces,
+    "create_workspace": _create_workspace,
+    "focus_workspace": _focus_workspace,
+    "rename_workspace": _rename_workspace,
+    "close_workspace": _close_workspace,
+}
 
 
 def build_tools(env: HerdrEnv) -> list:
@@ -112,7 +107,7 @@ def build_tools(env: HerdrEnv) -> list:
         action = require_str(arguments, "action")
         builder = _ACTIONS.get(action)
         if builder is None:
-            raise ValueError(f"unknown action; use one of {sorted(_ACTIONS)}")
+            raise ToolInputError(f"unknown action; use one of {sorted(_ACTIONS)}")
         method, params = builder(arguments)
         payload = await client.request(
             env.socket_path,

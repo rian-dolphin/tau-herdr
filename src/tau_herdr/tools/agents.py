@@ -7,6 +7,8 @@ import shlex
 import re
 import time
 
+from tau_coding.tools import ToolInputError
+
 from .. import client
 from .._env import HerdrEnv
 from ._base import (
@@ -62,7 +64,7 @@ async def start_agent(env: HerdrEnv, arguments, signal) -> dict[str, object]:
     kind = require_str(arguments, "kind").lower()
     name = str(arguments.get("name") or "")
     if name and not _NAME.match(name):
-        raise ValueError(
+        raise ToolInputError(
             "'name' must be lowercase letters, digits, '-' or '_' (herdr rejects uppercase)"
         )
     split_params: dict[str, object] = {
@@ -92,12 +94,14 @@ async def start_agent(env: HerdrEnv, arguments, signal) -> dict[str, object]:
         )
         return {"pane_id": pane_id, "name": name or None, "kind": kind}
 
-    timeout_ms = int(arguments.get("timeout_ms") or 30000)
+    start_timeout_ms = int(arguments.get("start_timeout_ms") or 30000)
     start_params: dict[str, object] = {
-        "name": name or kind,
+        # Default names must be unique or a second agent of the same
+        # kind becomes untargetable.
+        "name": name or f"{kind}-{pane_id.lower().replace(':', '-')}",
         "kind": kind,
         "pane_id": pane_id,
-        "timeout_ms": timeout_ms,
+        "timeout_ms": start_timeout_ms,
     }
     if args:
         start_params["args"] = args
@@ -108,7 +112,7 @@ async def start_agent(env: HerdrEnv, arguments, signal) -> dict[str, object]:
                 env.socket_path,
                 "agent.start",
                 start_params,
-                timeout=timeout_ms / 1000 + TRIVIAL_TIMEOUT,
+                timeout=start_timeout_ms / 1000 + TRIVIAL_TIMEOUT,
             )
             break
         except client.HerdrError as error:
@@ -191,7 +195,7 @@ def build_tools(env: HerdrEnv) -> list:
         target = require_str(arguments, "target")
         source = str(arguments.get("source") or "recent")
         if source not in _READ_SOURCES:
-            raise ValueError(f"'source' must be one of {sorted(_READ_SOURCES)}")
+            raise ToolInputError(f"'source' must be one of {sorted(_READ_SOURCES)}")
         payload = await client.request(
             env.socket_path,
             "agent.read",
@@ -287,9 +291,9 @@ def build_tools(env: HerdrEnv) -> list:
                     "description": "Pane to split (default: the current pane).",
                 },
                 "focus": {"type": "boolean"},
-                "timeout_ms": {
+                "start_timeout_ms": {
                     "type": "integer",
-                    "description": "Agent startup timeout (default 30000).",
+                    "description": "Agent startup timeout (default 30000, max 300000).",
                 },
             },
             _start,

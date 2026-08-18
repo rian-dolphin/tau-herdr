@@ -10,6 +10,7 @@ from collections.abc import Awaitable, Callable, Mapping
 
 from tau_agent.messages import TextContent
 from tau_agent.tools import AgentTool, AgentToolResult
+from tau_coding.tools import ToolInputError
 
 from .. import client
 from .._env import HerdrEnv
@@ -77,7 +78,7 @@ def opt(arguments: Mapping[str, object], *names: str) -> dict[str, object]:
 def require_str(arguments: Mapping[str, object], name: str) -> str:
     value = arguments.get(name)
     if not isinstance(value, str) or not value:
-        raise ValueError(f"'{name}' is required")
+        raise ToolInputError(f"'{name}' is required")
     return value
 
 
@@ -95,8 +96,10 @@ async def resolve_pane_id(env: HerdrEnv, target: str) -> str:
 
 
 def _is_wait_timeout(error: client.HerdrError) -> bool:
-    code = error.code.lower()
-    return "timeout" in code or "timed_out" in code
+    # Exactly the codes herdr 0.8.0 uses for an expired wait (verified
+    # live). Substring matching would swallow validation errors like
+    # invalid_timeout_ms as "keep waiting".
+    return error.code.lower() in ("timeout", "timed_out")
 
 
 async def chunked_wait(
@@ -132,6 +135,7 @@ async def chunked_wait(
         chunk_ms = WAIT_CHUNK_MS
         if deadline is not None:
             chunk_ms = min(chunk_ms, max(1, int((deadline - now) * 1000)))
+        chunk_started = time.monotonic()
         try:
             return await client.request(
                 env.socket_path,
@@ -141,6 +145,10 @@ async def chunked_wait(
             )
         except client.HerdrError as error:
             if _is_wait_timeout(error):
+                # A server that answers a chunk early must not turn
+                # this loop into a socket hammer.
+                if time.monotonic() - chunk_started < chunk_ms / 1000:
+                    await asyncio.sleep(0.05)
                 continue
             code = error.code.lower()
             if ("not_found" in code or "no_such" in code) and (

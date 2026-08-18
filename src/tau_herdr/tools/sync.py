@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from tau_coding.tools import ToolInputError
+
 from .. import client
 from .._env import HerdrEnv
 from ._base import (
@@ -60,7 +62,7 @@ def build_tools(env: HerdrEnv) -> list:
         pane_id = require_str(arguments, "pane_id")
         source = str(arguments.get("source") or "recent")
         if source not in _READ_SOURCES:
-            raise ValueError(f"'source' must be one of {sorted(_READ_SOURCES)}")
+            raise ToolInputError(f"'source' must be one of {sorted(_READ_SOURCES)}")
         payload = await client.request(
             env.socket_path,
             "pane.read",
@@ -80,10 +82,13 @@ def build_tools(env: HerdrEnv) -> list:
         match = arguments.get("match")
         regex = arguments.get("regex")
         if bool(match) == bool(regex):
-            raise ValueError("pass exactly one of 'match' (substring) or 'regex'")
+            raise ToolInputError("pass exactly one of 'match' (substring) or 'regex'")
+        source = str(arguments.get("source") or "recent")
+        if source not in _READ_SOURCES:
+            raise ToolInputError(f"'source' must be one of {sorted(_READ_SOURCES)}")
         params: dict[str, object] = {
             "pane_id": pane_id,
-            "source": _READ_SOURCES[str(arguments.get("source") or "recent")],
+            "source": _READ_SOURCES[source],
             "match": (
                 {"type": "substring", "value": str(match)}
                 if match
@@ -100,17 +105,18 @@ def build_tools(env: HerdrEnv) -> list:
             raise ValueError(
                 f"no matching output in {pane_id} after {timeout_ms}ms"
             )
-        return json_result(
-            {"matched_line": payload.get("matched_line")},
-            text=f"Matched: {payload.get('matched_line')}",
-        )
+        matched = payload.get("matched_line")
+        if not isinstance(matched, str):
+            read = payload.get("read") if isinstance(payload.get("read"), dict) else {}
+            matched = str(read.get("text", ""))
+        return json_result({"matched_line": matched}, text=f"Matched: {matched}")
 
     async def _send_keys(arguments, signal):
         del signal
         target = require_str(arguments, "target")
         keys = arguments.get("keys")
         if not isinstance(keys, list) or not keys:
-            raise ValueError("'keys' must be a non-empty array")
+            raise ToolInputError("'keys' must be a non-empty array")
         keys = [str(k) for k in keys]
         if is_pane_id(target):
             await client.request(

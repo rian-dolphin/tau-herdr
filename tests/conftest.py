@@ -45,7 +45,6 @@ class FakeHerdr:
     requests: list[dict] = field(default_factory=list)
     script: dict[str, list[dict]] = field(default_factory=dict)
     defaults: dict[str, dict] = field(default_factory=dict)
-    respond_error: bool = False
     hang: bool = False
 
     def requests_for(self, method: str) -> list[dict]:
@@ -55,8 +54,6 @@ class FakeHerdr:
         method = request.get("method", "")
         queue = self.script.get(method)
         payload = queue.pop(0) if queue else self.defaults.get(method, {"type": "ok"})
-        if self.respond_error:
-            payload = {"__error__": {"code": "boom", "message": "boom"}}
         if "__error__" in payload:
             return {"id": request.get("id"), "error": payload["__error__"]}
         return {"id": request.get("id"), "result": payload}
