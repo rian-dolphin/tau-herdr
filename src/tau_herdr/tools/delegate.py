@@ -16,7 +16,7 @@ from ._base import (
     require_str,
     tool,
 )
-from .agents import start_agent
+from .agents import start_agent, submit_prompt
 
 _BOOT_BUDGET_MS = 90_000
 _SETTLE_S = 1.5
@@ -54,12 +54,7 @@ async def _submit_prompt(env: HerdrEnv, target: str, text: str, signal) -> None:
     """
     for _ in range(_PROMPT_ATTEMPTS):
         before = (await _agent_info(env, target)).get("state_change_seq")
-        await client.request(
-            env.socket_path,
-            "agent.prompt",
-            {"target": target, "text": text},
-            timeout=TRIVIAL_TIMEOUT,
-        )
+        await submit_prompt(env, target, text)
         stall_deadline = time.monotonic() + _STALL_WINDOW_S
         while time.monotonic() < stall_deadline:
             if cancelled(signal):

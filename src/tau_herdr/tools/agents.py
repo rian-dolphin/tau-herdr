@@ -125,6 +125,42 @@ async def start_agent(env: HerdrEnv, arguments, signal) -> dict[str, object]:
     return {"pane_id": pane_id, "name": start_params["name"], "kind": kind, **summary}
 
 
+async def submit_prompt(env: HerdrEnv, target: str, text: str) -> str:
+    """Submit a prompt; shared with herdr_delegate.
+
+    `agent.prompt` only accepts agents herdr itself started or
+    detected. A self-reported pane (a spawned tau) answers
+    `agent_not_ready`, so fall back to typing the text and pressing
+    Enter (verified live: this submits into tau's TUI).
+    """
+    try:
+        await client.request(
+            env.socket_path,
+            "agent.prompt",
+            {"target": target, "text": text},
+            timeout=TRIVIAL_TIMEOUT,
+        )
+        return "prompted"
+    except client.HerdrError as error:
+        if error.code != "agent_not_ready":
+            raise
+    pane_id = await resolve_pane_id(env, target)
+    await client.request(
+        env.socket_path,
+        "pane.send_text",
+        {"pane_id": pane_id, "text": text},
+        timeout=TRIVIAL_TIMEOUT,
+    )
+    await asyncio.sleep(0.3)
+    await client.request(
+        env.socket_path,
+        "pane.send_keys",
+        {"pane_id": pane_id, "keys": ["Enter"]},
+        timeout=TRIVIAL_TIMEOUT,
+    )
+    return "typed"
+
+
 def build_tools(env: HerdrEnv) -> list:
     async def _start(arguments, signal):
         info = await start_agent(env, arguments, signal)
@@ -142,12 +178,7 @@ def build_tools(env: HerdrEnv) -> list:
         target = require_str(arguments, "target")
         text = require_str(arguments, "text")
         if arguments.get("submit", True):
-            await client.request(
-                env.socket_path,
-                "agent.prompt",
-                {"target": target, "text": text},
-                timeout=TRIVIAL_TIMEOUT,
-            )
+            await submit_prompt(env, target, text)
             return result(f"Prompt submitted to {target}")
         pane_id = await resolve_pane_id(env, target)
         await client.request(

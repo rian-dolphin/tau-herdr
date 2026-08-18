@@ -34,6 +34,11 @@ Verified live against herdr 0.8.0 (protocol 19):
   the spawned Tau's own self-report (v0.1) makes it visible.
 - Socket read `source` values use underscores (`recent_unwrapped`);
   we expose the CLI spelling (`recent-unwrapped`) and map on the wire.
+- `agent.prompt` only accepts agents herdr itself started or
+  detected; a self-reported pane (a spawned tau) answers
+  `agent_not_ready`.
+  Prompt submission falls back to `pane.send_text` + Enter, which
+  submits into tau's TUI (verified live end to end).
 - `agent.wait` returns immediately when the status is already
   satisfied, its success payload is `agent_info` (`{"agent": {...}}`),
   and its timeout is an error envelope with code `timeout` (all three

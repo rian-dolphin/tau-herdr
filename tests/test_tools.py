@@ -127,6 +127,21 @@ async def test_send_prompt_submit_and_type(tmp_path, monkeypatch, fake_herdr):
     }
 
 
+async def test_send_prompt_falls_back_to_typing(tmp_path, monkeypatch, fake_herdr):
+    # Self-reported panes (spawned tau) reject agent.prompt.
+    runtime = _load_runtime(tmp_path, monkeypatch, socket_path=fake_herdr.socket_path)
+    fake_herdr.script["agent.prompt"] = [
+        {"__error__": {"code": "agent_not_ready", "message": "not an active named agent"}}
+    ]
+    fake_herdr.defaults["agent.get"] = _agent("idle")
+    await _run(runtime, "herdr_send_prompt", {"target": "w1:p9", "text": "hi"})
+    assert fake_herdr.requests_for("pane.send_text")[0]["params"] == {
+        "pane_id": "w1:p9",
+        "text": "hi",
+    }
+    assert fake_herdr.requests_for("pane.send_keys")[0]["params"]["keys"] == ["Enter"]
+
+
 async def test_wait_agent_times_out_with_status(tmp_path, monkeypatch, fake_herdr):
     runtime = _load_runtime(tmp_path, monkeypatch, socket_path=fake_herdr.socket_path)
     fake_herdr.defaults["agent.wait"] = _TIMEOUT
