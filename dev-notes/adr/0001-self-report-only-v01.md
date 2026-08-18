@@ -4,7 +4,9 @@ title: "ADR 0001 — Ship v0.1 as self-report only"
 
 ## Status
 
-Accepted
+Accepted for v0.1.
+The tool deferral is superseded by ADR 0003: v0.2 ships the
+orchestration tools.
 
 ## Context
 
