@@ -14,17 +14,52 @@ def anyio_backend() -> str:
     return "asyncio"
 
 
+HERDR_ENV_VARS = (
+    "HERDR_ENV",
+    "HERDR_PANE_ID",
+    "HERDR_SOCKET_PATH",
+    "HERDR_AGENT_LABEL",
+    "TAU_HERDR_DISABLE",
+    "TAU_HERDR_AGENT_LABEL",
+)
+
+
+@pytest.fixture(autouse=True)
+def _clean_herdr_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The test host may itself run inside herdr; start every test clean."""
+    for name in HERDR_ENV_VARS:
+        monkeypatch.delenv(name, raising=False)
+
+
 @dataclass
 class FakeHerdr:
-    """A fake herdr socket server that records every request."""
+    """A fake herdr socket server that records every request.
+
+    `script[method]` is a FIFO of result payloads consumed one per
+    request; `defaults[method]` answers when the queue is empty; the
+    fallback is `{"type": "ok"}`. A payload of `{"__error__": {...}}`
+    becomes an error envelope.
+    """
 
     socket_path: str
     requests: list[dict] = field(default_factory=list)
+    script: dict[str, list[dict]] = field(default_factory=dict)
+    defaults: dict[str, dict] = field(default_factory=dict)
     respond_error: bool = False
     hang: bool = False
 
     def requests_for(self, method: str) -> list[dict]:
         return [r for r in self.requests if r.get("method") == method]
+
+    def respond(self, request: dict) -> dict:
+        method = request.get("method", "")
+        queue = self.script.get(method)
+        payload = queue.pop(0) if queue else self.defaults.get(method, {"type": "ok"})
+        if self.respond_error:
+            payload = {"__error__": {"code": "boom", "message": "boom"}}
+        if "__error__" in payload:
+            return {"id": request.get("id"), "error": payload["__error__"]}
+        return {"id": request.get("id"), "result": payload}
 
 
 @pytest.fixture
@@ -40,13 +75,7 @@ async def fake_herdr():
                 server_state.requests.append(request)
                 if server_state.hang:
                     continue
-                if server_state.respond_error:
-                    response = {
-                        "id": request.get("id"),
-                        "error": {"code": "boom", "message": "boom"},
-                    }
-                else:
-                    response = {"id": request.get("id"), "result": {"type": "ok"}}
+                response = server_state.respond(request)
                 writer.write(json.dumps(response).encode() + b"\n")
                 await writer.drain()
             writer.close()

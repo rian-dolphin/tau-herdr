@@ -19,16 +19,6 @@ pytestmark = pytest.mark.anyio
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
-HERDR_ENV_VARS = (
-    "HERDR_ENV",
-    "HERDR_PANE_ID",
-    "HERDR_SOCKET_PATH",
-    "HERDR_AGENT_LABEL",
-    "TAU_HERDR_DISABLE",
-    "TAU_HERDR_AGENT_LABEL",
-)
-
-
 def _paths(tmp_path: Path) -> TauResourcePaths:
     return TauResourcePaths(
         root=tmp_path / "home-tau",
@@ -58,12 +48,6 @@ class RecordingSession:
 
     async def append_custom_entry(self, namespace, data):
         pass
-
-
-@pytest.fixture(autouse=True)
-def _clean_herdr_env(monkeypatch: pytest.MonkeyPatch) -> None:
-    for name in HERDR_ENV_VARS:
-        monkeypatch.delenv(name, raising=False)
 
 
 def _load_runtime(

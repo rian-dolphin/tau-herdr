@@ -142,6 +142,12 @@ def setup(tau: "ExtensionAPI") -> None:
         return
     reporter = _Reporter(env)
 
+    from .tools import PROMPT_GUIDELINE, build_all_tools
+
+    for herdr_tool in build_all_tools(env):
+        tau.register_tool(herdr_tool)
+    tau.add_prompt_guideline(PROMPT_GUIDELINE)
+
     @tau.on("session_start")
     async def _on_session_start(event, context: "ExtensionContext") -> None:
         reporter.report_state("idle")
