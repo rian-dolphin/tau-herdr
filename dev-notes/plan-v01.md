@@ -41,7 +41,7 @@ context (they go stale after `/reload`).
    - `agent_start` → enqueue `working`.
    - `agent_settled` → enqueue `idle`.
    - `session_shutdown` (every reason) → drain the queue with a bounded
-     wait (about 1 s); on reason `quit`, also send
+     wait (1 s, plus 0.5 s for the release call); on reason `quit`, also send
      `pane.release_agent` (params include `agent`) before returning.
 3. `seq` is assigned at enqueue time:
    `seq = max(last_seq + 1, time.time_ns())`.

@@ -13,6 +13,7 @@ import time
 from typing import TYPE_CHECKING
 
 from . import client
+from .badges import BadgeTracker, title_from_prompt
 from ._env import HerdrEnv
 
 if TYPE_CHECKING:
@@ -67,6 +68,9 @@ class _Reporter:
             "session_start_source": reason,
         }
         self._enqueue("pane.report_agent_session", params)
+
+    def report_metadata(self, fields: dict[str, object]) -> None:
+        self._enqueue("pane.report_metadata", self._base_params() | fields)
 
     def _enqueue(self, method: str, params: dict[str, object]) -> None:
         self._queue.put_nowait((method, params))
@@ -148,12 +152,44 @@ def setup(tau: "ExtensionAPI") -> None:
         tau.register_tool(herdr_tool)
     tau.add_prompt_guideline(PROMPT_GUIDELINE)
 
+    tracker = BadgeTracker()
+
     @tau.on("session_start")
     async def _on_session_start(event, context: "ExtensionContext") -> None:
         reporter.report_state("idle")
         session_id = context.session_id
         if session_id:
             reporter.report_session(session_id, reason=event.reason)
+        tracker.reset()
+        reporter.report_metadata(
+            {
+                "clear_title": True,
+                "tokens": {"model": context.model, "ctx": None, "cost": None},
+            }
+        )
+
+    @tau.on("turn_end")
+    async def _on_turn_end(event, context: "ExtensionContext") -> None:
+        message = getattr(event, "message", None)
+        usage = getattr(message, "usage", None)
+        if usage is None:
+            return
+        # Interrupted and errored turns carry a zeroed Usage; reporting
+        # it would wipe the real context badge (tau's own meter skips
+        # these messages too).
+        if getattr(message, "stop_reason", "stop") in ("error", "aborted"):
+            return
+        tokens = tracker.turn_tokens(usage)
+        tokens["model"] = context.model
+        reporter.report_metadata({"tokens": tokens})
+
+    @tau.on("input")
+    async def _on_input(event, _context: "ExtensionContext"):
+        if event.source == "interactive":
+            title = title_from_prompt(event.text)
+            if title:
+                reporter.report_metadata({"title": title})
+        return None
 
     @tau.on("agent_start")
     async def _on_agent_start(_event, _context: "ExtensionContext") -> None:

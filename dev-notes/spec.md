@@ -98,6 +98,18 @@ later events.
 A toast mid-run is not actionable; `/herdr` surfaces the failure
 instead.
 
+## Pane badges (added in v0.3, ADR 0004)
+
+Display-only metadata rides the same queue via
+`pane.report_metadata`:
+
+- `title`: first line of the latest interactive prompt (60 chars);
+  cleared on every `session_start`.
+- Tokens: `model` (refreshed on `session_start` and `turn_end`),
+  `ctx` (last assistant message's context size, compact), and `cost`
+  (accumulated session cost, omitted while zero; the accumulator
+  resets on `session_start`).
+
 ## `/herdr` command
 
 Tau has no status-line API for extensions, so a `/herdr` slash command

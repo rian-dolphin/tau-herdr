@@ -20,6 +20,10 @@ for Tau sessions.
 | the run settles (after retries, compaction, continuations) | `idle` |
 | Tau quits | the pane's agent authority is released |
 
+The pane also gets live badges: its title becomes the latest prompt,
+and `model` / `ctx` (context size) / `cost` (session spend) tokens
+update after every turn.
+
 Reports go straight to herdr's Unix socket (`HERDR_SOCKET_PATH`) as
 newline-delimited JSON — no subprocess, nothing on the agent loop's hot
 path, and a dead herdr server never breaks Tau.
@@ -94,6 +98,7 @@ uv run --project /path/to/tau pytest tests/
 
 ## Roadmap
 
-v0.3 candidates: pane badges (`pane.report_metadata` token/state
-labels), a herdr detection manifest for tau, and push-based waiting
-via `events.subscribe`.
+Future candidates: a herdr detection manifest for tau (native
+`agent.start --kind tau`), push-based waiting via `events.subscribe`,
+and a `blocked` state once tau exposes an ask-user event to
+extensions.
