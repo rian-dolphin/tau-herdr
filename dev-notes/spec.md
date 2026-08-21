@@ -103,8 +103,7 @@ instead.
 Display-only metadata rides the same queue via
 `pane.report_metadata`:
 
-- `title`: first line of the latest interactive prompt (60 chars);
-  cleared on every `session_start`.
+- The pane title is left unchanged.
 - Tokens: `model` (refreshed on `session_start` and `turn_end`),
   `ctx` (last assistant message's context size, compact), and `cost`
   (accumulated session cost, omitted while zero; the accumulator

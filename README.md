@@ -20,9 +20,9 @@ for Tau sessions.
 | the run settles (after retries, compaction, continuations) | `idle` |
 | Tau quits | the pane's agent authority is released |
 
-The pane also gets live badges: its title becomes the latest prompt,
-and `model` / `ctx` (context size) / `cost` (session spend) tokens
-update after every turn.
+The pane also gets live `model` / `ctx` (context size) / `cost`
+(session spend) badges, updated after every turn. The extension does not
+change the pane title.
 
 Reports go straight to herdr's Unix socket (`HERDR_SOCKET_PATH`) as
 newline-delimited JSON — no subprocess, nothing on the agent loop's hot

@@ -13,7 +13,7 @@ import time
 from typing import TYPE_CHECKING
 
 from . import client
-from .badges import BadgeTracker, title_from_prompt
+from .badges import BadgeTracker
 from ._env import HerdrEnv
 
 if TYPE_CHECKING:
@@ -160,10 +160,7 @@ def setup(tau: "ExtensionAPI") -> None:
             reporter.report_session(session_id, reason=event.reason)
         tracker.reset()
         reporter.report_metadata(
-            {
-                "clear_title": True,
-                "tokens": {"model": context.model, "ctx": None, "cost": None},
-            }
+            {"tokens": {"model": context.model, "ctx": None, "cost": None}}
         )
 
     @tau.on("turn_end")
@@ -180,14 +177,6 @@ def setup(tau: "ExtensionAPI") -> None:
         tokens = tracker.turn_tokens(usage)
         tokens["model"] = context.model
         reporter.report_metadata({"tokens": tokens})
-
-    @tau.on("input")
-    async def _on_input(event, _context: "ExtensionContext"):
-        if event.source == "interactive":
-            title = title_from_prompt(event.text)
-            if title:
-                reporter.report_metadata({"title": title})
-        return None
 
     @tau.on("agent_start")
     async def _on_agent_start(_event, _context: "ExtensionContext") -> None:

@@ -5,18 +5,10 @@ import pytest
 from tau_agent.messages import AssistantMessage, Usage, UsageCost
 from tau_coding.extensions import TurnEndEvent
 
-from tau_herdr.badges import BadgeTracker, compact_count, title_from_prompt
+from tau_herdr.badges import BadgeTracker, compact_count
 from test_extension import _load_runtime
 
 pytestmark = pytest.mark.anyio
-
-
-def test_title_from_prompt():
-    assert title_from_prompt("Fix the build\nplease") == "Fix the build"
-    assert title_from_prompt("   \n\n") is None
-    long = "x" * 100
-    title = title_from_prompt(long)
-    assert len(title) == 60 and title.endswith("…")
 
 
 def test_compact_count():
@@ -53,7 +45,6 @@ def _turn_end(usage: Usage, *, stop_reason: str = "stop") -> TurnEndEvent:
 async def test_badges_reported_over_the_wire(tmp_path, monkeypatch, fake_herdr):
     runtime = _load_runtime(tmp_path, monkeypatch, socket_path=fake_herdr.socket_path)
     await runtime.emit_session_start("startup")
-    await runtime.run_input_hooks("Fix the flaky test\nwith details")
     await runtime.emit_event(
         _turn_end(Usage(input=30_000, cache_read=10_000, cost=UsageCost(total=0.25)))
     )
@@ -62,11 +53,8 @@ async def test_badges_reported_over_the_wire(tmp_path, monkeypatch, fake_herdr):
 
     reports = fake_herdr.requests_for("pane.report_metadata")
     start = reports[0]["params"]
-    assert start["clear_title"] is True
     assert start["tokens"] == {"model": "fake", "ctx": None, "cost": None}
-    title = reports[1]["params"]
-    assert title["title"] == "Fix the flaky test"
-    turn = reports[2]["params"]
+    turn = reports[1]["params"]
     assert turn["tokens"] == {"ctx": "40k", "cost": "$0.25", "model": "fake"}
     seqs = [r["params"]["seq"] for r in reports]
     assert seqs == sorted(seqs)
@@ -95,17 +83,12 @@ def test_ctx_prefers_provider_total_tokens():
     assert tracker.turn_tokens(usage)["ctx"] == "52k"
 
 
-async def test_extension_input_does_not_set_title(tmp_path, monkeypatch, fake_herdr):
+async def test_input_does_not_set_title(tmp_path, monkeypatch, fake_herdr):
     runtime = _load_runtime(tmp_path, monkeypatch, socket_path=fake_herdr.socket_path)
-    await runtime.run_input_hooks("internal turn", source="extension")
+    await runtime.run_input_hooks("Fix the flaky test")
     await runtime.emit_session_shutdown("reload")
     assert runtime.diagnostics == ()
-    titles = [
-        r
-        for r in fake_herdr.requests_for("pane.report_metadata")
-        if "title" in r["params"]
-    ]
-    assert titles == []
+    assert fake_herdr.requests_for("pane.report_metadata") == []
 
 
 async def test_cost_resets_on_session_rebind(tmp_path, monkeypatch, fake_herdr):

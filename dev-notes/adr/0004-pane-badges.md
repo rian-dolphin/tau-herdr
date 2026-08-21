@@ -1,10 +1,10 @@
 ---
-title: "ADR 0004 — Pane badges: title from the prompt, model/ctx/cost tokens"
+title: "ADR 0004 — Pane badges: model/ctx/cost tokens"
 ---
 
 ## Status
 
-Accepted
+Accepted; amended to remove prompt-derived titles
 
 ## Context
 
@@ -15,19 +15,14 @@ herdr-managed agents (claude, codex) get useful titles because their
 CLIs set the terminal title themselves.
 A tau pane shows only "τ", and no usage information.
 
-Tau's extension API exposes the user's prompt (the `input` hook), the
-model (`context.model`), and per-turn `Usage` with token counts and
-USD cost (`turn_end`).
+Tau's extension API exposes the model (`context.model`) and per-turn
+`Usage` with token counts and USD cost (`turn_end`).
 
 ## Decision
 
-Report three things, through the existing self-report queue (shared
-`seq`, shared shutdown drain):
+Report tokens through the existing self-report queue (shared `seq`,
+shared shutdown drain), while leaving the pane title unchanged:
 
-- `title`: the first line of the latest user prompt, truncated to 60
-  characters.
-  Reported on the `input` hook; cleared on every `session_start` so a
-  resumed or new session does not keep a stale title.
 - Token `model`: from `context.model`, refreshed on `session_start`
   and every `turn_end` (the model can change mid-session via
   `/model`; there is no dedicated change event).
@@ -43,9 +38,9 @@ fine), and we set no `ttl_ms` (badges die with the pane).
 
 ## Consequences
 
-- A tau pane in herdr shows what it is working on and what it has
-  spent, at the cost of one queued fire-and-forget report per turn
-  and per prompt.
+- A tau pane in herdr shows model usage and spend without exposing prompt
+  text or replacing the user's pane title, at the cost of one queued
+  fire-and-forget report per turn.
 - Cumulative cost is per-runtime-lifetime for the pane: a resumed
   session restarts the meter.
   Tau does not expose historical session cost to extensions; showing

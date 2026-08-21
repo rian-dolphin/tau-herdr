@@ -1,19 +1,6 @@
-"""Pane badges: title from the prompt, model/ctx/cost tokens (ADR 0004)."""
+"""Pane model/context/cost badges (ADR 0004)."""
 
 from __future__ import annotations
-
-_TITLE_LIMIT = 60
-
-
-def title_from_prompt(text: str) -> str | None:
-    """First line of the prompt, truncated; `None` when there is none."""
-    stripped = text.strip()
-    if not stripped:
-        return None
-    line = stripped.splitlines()[0].strip()
-    if len(line) <= _TITLE_LIMIT:
-        return line
-    return line[: _TITLE_LIMIT - 1] + "…"
 
 
 def compact_count(n: int) -> str:
