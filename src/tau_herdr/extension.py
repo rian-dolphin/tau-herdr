@@ -25,6 +25,8 @@ if TYPE_CHECKING:
 
 SOURCE = "tau-herdr"
 DRAIN_TIMEOUT = 1.0
+IDLE_REPORT_DELAY = 2.0
+ERROR_IDLE_REPORT_DELAY = 5.0
 
 
 class _Reporter:
@@ -41,8 +43,10 @@ class _Reporter:
         self._env = env
         self._queue: asyncio.Queue[tuple[str, dict[str, object]]] = asyncio.Queue()
         self._worker: asyncio.Task[None] | None = None
+        self._pending_idle: asyncio.Task[None] | None = None
         self._last_seq = 0
         self.last_state: str | None = None
+        self.last_outcome: str | None = None
         self.last_ok: bool | None = None
 
     def _next_seq(self) -> int:
@@ -61,6 +65,44 @@ class _Reporter:
 
     def report_state(self, state: str) -> None:
         self._enqueue("pane.report_agent", self._base_params() | {"state": state})
+
+    def report_working(self) -> None:
+        self.cancel_pending_idle()
+        self.report_state("working")
+
+    def schedule_idle(self, *, outcome: str) -> None:
+        """Report idle only if another run does not begin shortly.
+
+        Herdr turns a background working-to-idle transition into a done
+        notification. Tau can settle a failed run and immediately start a
+        separate continuation, so reporting synchronously creates false
+        "finished" notifications that cannot be retracted.
+        """
+        self.cancel_pending_idle()
+        self.last_outcome = outcome
+        delay = (
+            ERROR_IDLE_REPORT_DELAY
+            if outcome in {"error", "aborted"}
+            else IDLE_REPORT_DELAY
+        )
+        self._pending_idle = asyncio.get_running_loop().create_task(
+            self._report_idle_after(delay)
+        )
+
+    async def _report_idle_after(self, delay: float) -> None:
+        try:
+            await asyncio.sleep(delay)
+            self.report_state("idle")
+        except asyncio.CancelledError:
+            raise
+        finally:
+            if self._pending_idle is asyncio.current_task():
+                self._pending_idle = None
+
+    def cancel_pending_idle(self) -> None:
+        if self._pending_idle is not None:
+            self._pending_idle.cancel()
+            self._pending_idle = None
 
     def report_session(self, session_id: str, *, reason: str) -> None:
         params = self._base_params() | {
@@ -99,6 +141,7 @@ class _Reporter:
         after `quit`, and after `reload`/`new`/`resume`/`branch` a new
         runtime (and reporter) takes over.
         """
+        self.cancel_pending_idle()
         try:
             await asyncio.wait_for(self._queue.join(), DRAIN_TIMEOUT)
         except (TimeoutError, asyncio.TimeoutError):
@@ -134,6 +177,8 @@ class _Reporter:
                 f"  socket:     {self._env.socket_path}",
                 f"  label:      {self._env.label}",
                 f"  last state: {self.last_state or 'none reported yet'}",
+                f"  last outcome: {self.last_outcome or 'none observed yet'}",
+                f"  idle pending: {'yes' if self._pending_idle is not None else 'no'}",
                 f"  last report: {last_report}",
             ]
         )
@@ -151,6 +196,7 @@ def setup(tau: "ExtensionAPI") -> None:
     # (/skill:herdr) — see ADR 0005 and ADR 0006.
 
     tracker = BadgeTracker()
+    run_outcome = "success"
 
     @tau.on("session_start")
     async def _on_session_start(event, context: "ExtensionContext") -> None:
@@ -180,11 +226,21 @@ def setup(tau: "ExtensionAPI") -> None:
 
     @tau.on("agent_start")
     async def _on_agent_start(_event, _context: "ExtensionContext") -> None:
-        reporter.report_state("working")
+        nonlocal run_outcome
+        run_outcome = "success"
+        reporter.report_working()
+
+    @tau.on("message_end")
+    async def _on_message_end(event, _context: "ExtensionContext") -> None:
+        nonlocal run_outcome
+        message = getattr(event, "message", None)
+        stop_reason = getattr(message, "stop_reason", None)
+        if stop_reason in {"error", "aborted"}:
+            run_outcome = stop_reason
 
     @tau.on("agent_settled")
     async def _on_agent_settled(_event, _context: "ExtensionContext") -> None:
-        reporter.report_state("idle")
+        reporter.schedule_idle(outcome=run_outcome)
 
     @tau.on("session_shutdown")
     async def _on_session_shutdown(event, _context: "ExtensionContext") -> None:
