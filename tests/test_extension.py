@@ -59,6 +59,7 @@ def _load_runtime(
     session_id: str | None = "session-1",
     extra_env: dict[str, str] | None = None,
 ) -> ExtensionRuntime:
+    monkeypatch.delenv("TAU_HERDR_OWNER_PID", raising=False)
     if socket_path is not None:
         monkeypatch.setenv("HERDR_ENV", "1")
         monkeypatch.setenv("HERDR_PANE_ID", "w1:p1")
