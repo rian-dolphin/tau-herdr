@@ -25,6 +25,7 @@ if TYPE_CHECKING:
 
 SOURCE = "tau-herdr"
 DRAIN_TIMEOUT = 1.0
+OWNER_PID_ENV = "TAU_HERDR_OWNER_PID"
 
 
 class _Reporter:
@@ -144,6 +145,19 @@ def setup(tau: "ExtensionAPI") -> None:
     env = HerdrEnv.from_environ(os.environ)
     if env is None:
         return
+
+    # Tool subprocesses inherit the pane's HERDR_* environment. Without an
+    # ownership marker, a nested Tau process (notably Tau's own test suite)
+    # can report its temporary sessions against the parent pane and produce
+    # false idle notifications or release the parent's agent authority.
+    # Environment changes stay scoped to this process and its descendants,
+    # so a later Tau launched by the pane's shell can claim ownership anew.
+    current_pid = str(os.getpid())
+    owner_pid = os.environ.get(OWNER_PID_ENV)
+    if owner_pid is not None and owner_pid != current_pid:
+        return
+    os.environ[OWNER_PID_ENV] = current_pid
+
     reporter = _Reporter(env)
 
     # The extension is invisible to the model: no tools, no prompt

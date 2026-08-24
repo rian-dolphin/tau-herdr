@@ -5,6 +5,7 @@ Requires Tau's packages on the import path: either
 checkout's env: `uv run --project /path/to/tau pytest tests/`.
 """
 
+import os
 import time
 from pathlib import Path
 
@@ -104,6 +105,39 @@ async def test_dormant_when_disabled(tmp_path, monkeypatch, fake_herdr):
     await runtime.emit_session_start("startup")
     await runtime.emit_session_shutdown("quit")
     assert fake_herdr.requests == []
+
+
+async def test_dormant_in_child_process(tmp_path, monkeypatch, fake_herdr):
+    # When a nested Tau process starts (e.g. Tau's own test suite),
+    # the parent's TAU_HERDR_OWNER_PID prevents it from reporting
+    # against the parent pane.
+    runtime = _load_runtime(
+        tmp_path,
+        monkeypatch,
+        socket_path=fake_herdr.socket_path,
+        extra_env={"TAU_HERDR_OWNER_PID": "1"},
+    )
+    assert runtime.diagnostics == ()
+    assert runtime.build_command_registry().get("herdr") is None
+    await runtime.emit_session_start("startup")
+    await runtime.emit_event(AgentStartEvent())
+    await runtime.emit_event(AgentSettledEvent())
+    await runtime.emit_session_shutdown("quit")
+    assert fake_herdr.requests == []
+
+
+async def test_process_claims_ownership_for_descendants(
+    tmp_path, monkeypatch, fake_herdr
+):
+    # The first Tau in a pane sets the ownership marker so child
+    # processes skip integration.
+    runtime = _load_runtime(
+        tmp_path, monkeypatch, socket_path=fake_herdr.socket_path
+    )
+    assert os.environ["TAU_HERDR_OWNER_PID"] == str(os.getpid())
+    await runtime.emit_session_start("startup")
+    await runtime.emit_session_shutdown("reload")
+    assert fake_herdr.requests_for("pane.report_agent") != []
 
 
 async def test_reports_state_sequence(tmp_path, monkeypatch, fake_herdr):
