@@ -5,13 +5,16 @@ Requires Tau's packages on the import path: either
 checkout's env: `uv run --project /path/to/tau pytest tests/`.
 """
 
+import asyncio
 import os
+import sys
 import time
 from pathlib import Path
 
 import pytest
 
-from tau_agent.events import AgentStartEvent
+from tau_agent.events import AgentStartEvent, MessageEndEvent
+from tau_agent.messages import AssistantMessage
 from tau_coding import TauResourcePaths
 from tau_coding.events import AgentSettledEvent
 from tau_coding.extensions import ExtensionRuntime
@@ -19,6 +22,7 @@ from tau_coding.extensions import ExtensionRuntime
 pytestmark = pytest.mark.anyio
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
+
 
 def _paths(tmp_path: Path) -> TauResourcePaths:
     return TauResourcePaths(
@@ -73,7 +77,21 @@ def _load_runtime(
         include_resource_dirs=False,
     )
     runtime.bind(RecordingSession(tmp_path, session_id=session_id))
+    module = _loaded_extension_module()
+    monkeypatch.setattr(module, "IDLE_REPORT_DELAY", 0.01)
+    monkeypatch.setattr(module, "ERROR_IDLE_REPORT_DELAY", 0.05)
     return runtime
+
+
+def _loaded_extension_module():
+    extension_path = REPO_ROOT / "src" / "tau_herdr" / "extension.py"
+    return next(
+        module
+        for name, module in reversed(tuple(sys.modules.items()))
+        if name.startswith("tau_extension_")
+        and getattr(module, "__file__", None)
+        and Path(module.__file__).resolve() == extension_path
+    )
 
 
 async def test_invisible_to_the_model_by_default(tmp_path, monkeypatch, fake_herdr):
@@ -146,6 +164,7 @@ async def test_reports_state_sequence(tmp_path, monkeypatch, fake_herdr):
     await runtime.emit_session_start("startup")
     await runtime.emit_event(AgentStartEvent())
     await runtime.emit_event(AgentSettledEvent())
+    await asyncio.sleep(0.02)
     await runtime.emit_session_shutdown("quit")
     assert runtime.diagnostics == ()
 
@@ -168,6 +187,53 @@ async def test_reports_state_sequence(tmp_path, monkeypatch, fake_herdr):
     assert releases[0]["params"]["agent"] == "tau"
     # The release must land after every queued report.
     assert fake_herdr.requests[-1]["method"] == "pane.release_agent"
+
+
+async def test_settled_idle_is_cancelled_when_another_run_starts(
+    tmp_path, monkeypatch, fake_herdr
+):
+    runtime = _load_runtime(tmp_path, monkeypatch, socket_path=fake_herdr.socket_path)
+    module = _loaded_extension_module()
+    monkeypatch.setattr(module, "IDLE_REPORT_DELAY", 0.05)
+    await runtime.emit_session_start("startup")
+    await runtime.emit_event(AgentStartEvent())
+    await runtime.emit_event(AgentSettledEvent())
+    await runtime.emit_event(AgentStartEvent())
+    await asyncio.sleep(0.06)
+    await runtime.emit_session_shutdown("reload")
+
+    reports = fake_herdr.requests_for("pane.report_agent")
+    assert [report["params"]["state"] for report in reports] == [
+        "idle",
+        "working",
+        "working",
+    ]
+
+
+async def test_error_settlement_uses_longer_idle_delay(
+    tmp_path, monkeypatch, fake_herdr
+):
+    runtime = _load_runtime(tmp_path, monkeypatch, socket_path=fake_herdr.socket_path)
+    await runtime.emit_session_start("startup")
+    await runtime.emit_event(AgentStartEvent())
+    await runtime.emit_event(
+        MessageEndEvent(
+            message=AssistantMessage(stop_reason="error", error_message="failed")
+        )
+    )
+    await runtime.emit_event(AgentSettledEvent())
+    await asyncio.sleep(0.02)
+    reports = fake_herdr.requests_for("pane.report_agent")
+    assert [report["params"]["state"] for report in reports] == ["idle", "working"]
+
+    await asyncio.sleep(0.05)
+    await runtime.emit_session_shutdown("reload")
+    reports = fake_herdr.requests_for("pane.report_agent")
+    assert [report["params"]["state"] for report in reports] == [
+        "idle",
+        "working",
+        "idle",
+    ]
 
 
 async def test_no_release_without_quit(tmp_path, monkeypatch, fake_herdr):
