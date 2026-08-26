@@ -16,7 +16,7 @@ import pytest
 from tau_agent.events import AgentStartEvent, MessageEndEvent
 from tau_agent.messages import AssistantMessage
 from tau_coding import TauResourcePaths
-from tau_coding.events import AgentSettledEvent
+from tau_coding.events import AgentSettledEvent, SessionInfoChangedEvent
 from tau_coding.extensions import ExtensionRuntime
 
 pytestmark = pytest.mark.anyio
@@ -35,12 +35,19 @@ def _paths(tmp_path: Path) -> TauResourcePaths:
 class RecordingSession:
     """Minimal BoundSession implementation for runtime tests."""
 
-    def __init__(self, tmp_path: Path, *, session_id: str | None = "session-1") -> None:
+    def __init__(
+        self,
+        tmp_path: Path,
+        *,
+        session_id: str | None = "session-1",
+        session_name: str | None = "Test session",
+    ) -> None:
         self.cwd = tmp_path
         self.model = "fake"
         self.provider_name = "fake"
         self.inference_provider = None
         self.session_id = session_id
+        self.session_name = session_name
         self.system_prompt = "You are Tau."
         self.is_running = False
         self.messages: list[object] = []
@@ -61,6 +68,7 @@ def _load_runtime(
     *,
     socket_path: str | None,
     session_id: str | None = "session-1",
+    session_name: str | None = "Test session",
     extra_env: dict[str, str] | None = None,
 ) -> ExtensionRuntime:
     monkeypatch.delenv("TAU_HERDR_OWNER_PID", raising=False)
@@ -76,7 +84,9 @@ def _load_runtime(
         extra_paths=(REPO_ROOT,),
         include_resource_dirs=False,
     )
-    runtime.bind(RecordingSession(tmp_path, session_id=session_id))
+    runtime.bind(
+        RecordingSession(tmp_path, session_id=session_id, session_name=session_name)
+    )
     module = _loaded_extension_module()
     monkeypatch.setattr(module, "IDLE_REPORT_DELAY", 0.01)
     monkeypatch.setattr(module, "ERROR_IDLE_REPORT_DELAY", 0.05)
@@ -150,9 +160,7 @@ async def test_process_claims_ownership_for_descendants(
 ):
     # The first Tau in a pane sets the ownership marker so child
     # processes skip integration.
-    runtime = _load_runtime(
-        tmp_path, monkeypatch, socket_path=fake_herdr.socket_path
-    )
+    runtime = _load_runtime(tmp_path, monkeypatch, socket_path=fake_herdr.socket_path)
     assert os.environ["TAU_HERDR_OWNER_PID"] == str(os.getpid())
     await runtime.emit_session_start("startup")
     await runtime.emit_session_shutdown("reload")
@@ -256,6 +264,41 @@ async def test_skips_session_report_without_session_id(
     assert runtime.diagnostics == ()
     assert fake_herdr.requests_for("pane.report_agent_session") == []
     assert fake_herdr.requests_for("pane.report_agent") != []
+
+
+async def test_reports_session_name_and_changes(tmp_path, monkeypatch, fake_herdr):
+    runtime = _load_runtime(
+        tmp_path,
+        monkeypatch,
+        socket_path=fake_herdr.socket_path,
+        session_name="Initial work",
+    )
+    await runtime.emit_session_start("startup")
+    await runtime.emit_event(SessionInfoChangedEvent(name="Renamed work"))
+    await runtime.emit_event(SessionInfoChangedEvent(name=None))
+    await runtime.emit_session_shutdown("reload")
+
+    metadata = fake_herdr.requests_for("pane.report_metadata")
+    assert metadata[0]["params"]["title"] == "Initial work"
+    assert metadata[1]["params"]["title"] == "Renamed work"
+    assert metadata[2]["params"]["clear_title"] is True
+    assert runtime.diagnostics == ()
+
+
+async def test_unnamed_session_clears_stale_title(tmp_path, monkeypatch, fake_herdr):
+    runtime = _load_runtime(
+        tmp_path,
+        monkeypatch,
+        socket_path=fake_herdr.socket_path,
+        session_name=None,
+    )
+    await runtime.emit_session_start("startup")
+    await runtime.emit_session_shutdown("reload")
+
+    metadata = fake_herdr.requests_for("pane.report_metadata")
+    assert metadata[0]["params"]["clear_title"] is True
+    assert "title" not in metadata[0]["params"]
+    assert runtime.diagnostics == ()
 
 
 async def test_label_overrides(tmp_path, monkeypatch, fake_herdr):

@@ -219,9 +219,20 @@ def setup(tau: "ExtensionAPI") -> None:
         if session_id:
             reporter.report_session(session_id, reason=event.reason)
         tracker.reset()
-        reporter.report_metadata(
-            {"tokens": {"model": context.model, "ctx": None, "cost": None}}
-        )
+        session_name = getattr(context, "session_name", None)
+        metadata: dict[str, object] = {
+            "tokens": {"model": context.model, "ctx": None, "cost": None}
+        }
+        if session_name:
+            metadata["title"] = session_name
+        else:
+            metadata["clear_title"] = True
+        reporter.report_metadata(metadata)
+
+    @tau.on("session_info_changed")
+    async def _on_session_info_changed(event, _context: "ExtensionContext") -> None:
+        name = getattr(event, "name", None)
+        reporter.report_metadata({"title": name} if name else {"clear_title": True})
 
     @tau.on("turn_end")
     async def _on_turn_end(event, context: "ExtensionContext") -> None:

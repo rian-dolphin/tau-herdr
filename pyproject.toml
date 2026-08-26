@@ -4,7 +4,7 @@ build-backend = "uv_build"
 
 [project]
 name = "tau-herdr"
-version = "0.5.0"
+version = "0.6.0"
 description = "herdr integration for Tau: agent state reporting, pane badges, and an orchestration skill."
 readme = "README.md"
 license = "MIT"
@@ -31,7 +31,7 @@ Repository = "https://github.com/rian-dolphin/tau-herdr"
 Issues = "https://github.com/rian-dolphin/tau-herdr/issues"
 
 [dependency-groups]
-dev = ["tau-ai>=0.3.0", "pytest>=8.0", "anyio>=4.0"]
+dev = ["tau-ai>=0.4.0", "pytest>=8.0", "anyio>=4.0"]
 
 # Tau extension manifest: Tau loads this entry when the repo is passed
 # to `tau -e ./tau-herdr` or placed in an extensions directory.

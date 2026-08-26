@@ -103,7 +103,9 @@ instead.
 Display-only metadata rides the same queue via
 `pane.report_metadata`:
 
-- The pane title is left unchanged.
+- Title: Tau's generated session name on `session_start` and
+  `session_info_changed`; cleared when the session has no name.
+  Tau versions before 0.4.0 continue without a title.
 - Tokens: `model` (refreshed on `session_start` and `turn_end`),
   `ctx` (last assistant message's context size, compact), and `cost`
   (accumulated session cost, omitted while zero; the accumulator

@@ -53,6 +53,7 @@ async def test_badges_reported_over_the_wire(tmp_path, monkeypatch, fake_herdr):
 
     reports = fake_herdr.requests_for("pane.report_metadata")
     start = reports[0]["params"]
+    assert start["title"] == "Test session"
     assert start["tokens"] == {"model": "fake", "ctx": None, "cost": None}
     turn = reports[1]["params"]
     assert turn["tokens"] == {"ctx": "40k", "cost": "$0.25", "model": "fake"}

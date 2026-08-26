@@ -15,14 +15,16 @@ for Tau sessions.
 
 | Tau moment | herdr sees |
 | --- | --- |
-| session starts (or resumes, branches, reloads) | `idle`, plus the Tau session id |
+| session starts (or resumes, branches, reloads) | `idle`, plus the Tau session id and name |
+| Tau generates or changes the session name | the pane title follows it |
 | a run starts | `working` |
 | the run settles (after retries, compaction, continuations) | `idle` |
 | Tau quits | the pane's agent authority is released |
 
-The pane also gets live `model` / `ctx` (context size) / `cost`
-(session spend) badges, updated after every turn. The extension does not
-change the pane title.
+The pane title uses Tau's concise generated session name, not prompt text.
+This requires Tau 0.4.0 or newer; older Tau versions continue to report
+state without a title. The pane also gets live `model` / `ctx` (context
+size) / `cost` (session spend) badges, updated after every turn.
 
 Reports go straight to herdr's Unix socket (`HERDR_SOCKET_PATH`) as
 newline-delimited JSON — no subprocess, nothing on the agent loop's hot

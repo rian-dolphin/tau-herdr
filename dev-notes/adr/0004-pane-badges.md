@@ -1,10 +1,10 @@
 ---
-title: "ADR 0004 — Pane badges: model/ctx/cost tokens"
+title: "ADR 0004 — Pane title and model/ctx/cost tokens"
 ---
 
 ## Status
 
-Accepted; amended to remove prompt-derived titles
+Accepted; amended to use Tau session names for titles
 
 ## Context
 
@@ -13,16 +13,25 @@ herdr shows display-only pane metadata reported through
 `tokens`, per-status `state_labels`, and a `display_agent`.
 herdr-managed agents (claude, codex) get useful titles because their
 CLIs set the terminal title themselves.
-A tau pane shows only "τ", and no usage information.
+Tau generates a concise name for each session.
+Tau 0.4.0 exposes this name to extensions through
+`context.session_name` and `session_info_changed`.
+Tau also exposes the model (`context.model`) and per-turn `Usage` with
+token counts and USD cost (`turn_end`).
 
-Tau's extension API exposes the model (`context.model`) and per-turn
-`Usage` with token counts and USD cost (`turn_end`).
+An earlier version used the first line of each prompt as the title.
+We removed that behavior because it exposed prompt text and changed the
+title on every prompt.
 
 ## Decision
 
-Report tokens through the existing self-report queue (shared `seq`,
-shared shutdown drain), while leaving the pane title unchanged:
+Report the title and tokens through the existing self-report queue.
+They share one `seq` and one shutdown drain:
 
+- Title: from `context.session_name` on `session_start`.
+  Clear a stale title when the session has no name.
+  Update the title on `session_info_changed`.
+  Use `getattr` so Tau versions before 0.4.0 continue without a title.
 - Token `model`: from `context.model`, refreshed on `session_start`
   and every `turn_end` (the model can change mid-session via
   `/model`; there is no dedicated change event).
@@ -38,9 +47,11 @@ fine), and we set no `ttl_ms` (badges die with the pane).
 
 ## Consequences
 
-- A tau pane in herdr shows model usage and spend without exposing prompt
-  text or replacing the user's pane title, at the cost of one queued
-  fire-and-forget report per turn.
+- A Tau pane shows the stable, concise session name without exposing
+  prompt text.
+- The reported title has priority over a manual herdr pane label while
+  Tau is active.
+- A title change adds one queued fire-and-forget report.
 - Cumulative cost is per-runtime-lifetime for the pane: a resumed
   session restarts the meter.
   Tau does not expose historical session cost to extensions; showing
