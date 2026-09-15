@@ -28,7 +28,9 @@ size) / `cost` (session spend) badges, updated after every turn.
 
 Reports go straight to herdr's Unix socket (`HERDR_SOCKET_PATH`) as
 newline-delimited JSON — no subprocess, nothing on the agent loop's hot
-path, and a dead herdr server never breaks Tau.
+path, and a dead herdr server never breaks Tau. Only the host session reports
+pane lifecycle and badges; in-process child sessions loaded by extensions such
+as `tau-subagents` remain dormant.
 
 ## Install
 

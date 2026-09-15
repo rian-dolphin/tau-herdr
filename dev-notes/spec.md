@@ -92,6 +92,11 @@ newline-delimited JSON request per call:
 - `TAU_HERDR_DISABLE=1` turns the extension off inside herdr.
 - The agent label is `TAU_HERDR_AGENT_LABEL`, else `HERDR_AGENT_LABEL`
   (herdr can set this itself), else `tau`.
+- Lifecycle and metadata reporting activates only after the extension runtime
+  receives `session_start`. Tau host frontends emit this event, while in-process
+  child sessions loaded by extensions such as `tau-subagents` do not. Child
+  runtimes therefore cannot report their state or badges against the host pane,
+  or release its authority when they close.
 
 If herdr's socket is unreachable we stay silent and keep trying on
 later events.
