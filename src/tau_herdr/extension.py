@@ -211,9 +211,14 @@ def setup(tau: "ExtensionAPI") -> None:
 
     tracker = BadgeTracker()
     run_outcome = "success"
+    # User extensions also load into in-process child CodingSessions. Only a
+    # host frontend emits session_start, so keep those child instances inert.
+    host_session_started = False
 
     @tau.on("session_start")
     async def _on_session_start(event, context: "ExtensionContext") -> None:
+        nonlocal host_session_started
+        host_session_started = True
         reporter.report_state("idle")
         session_id = context.session_id
         if session_id:
@@ -231,11 +236,15 @@ def setup(tau: "ExtensionAPI") -> None:
 
     @tau.on("session_info_changed")
     async def _on_session_info_changed(event, _context: "ExtensionContext") -> None:
+        if not host_session_started:
+            return
         name = getattr(event, "name", None)
         reporter.report_metadata({"title": name} if name else {"clear_title": True})
 
     @tau.on("turn_end")
     async def _on_turn_end(event, context: "ExtensionContext") -> None:
+        if not host_session_started:
+            return
         message = getattr(event, "message", None)
         usage = getattr(message, "usage", None)
         if usage is None:
@@ -252,12 +261,16 @@ def setup(tau: "ExtensionAPI") -> None:
     @tau.on("agent_start")
     async def _on_agent_start(_event, _context: "ExtensionContext") -> None:
         nonlocal run_outcome
+        if not host_session_started:
+            return
         run_outcome = "success"
         reporter.report_working()
 
     @tau.on("message_end")
     async def _on_message_end(event, _context: "ExtensionContext") -> None:
         nonlocal run_outcome
+        if not host_session_started:
+            return
         message = getattr(event, "message", None)
         stop_reason = getattr(message, "stop_reason", None)
         if stop_reason in {"error", "aborted"}:
@@ -265,10 +278,16 @@ def setup(tau: "ExtensionAPI") -> None:
 
     @tau.on("agent_settled")
     async def _on_agent_settled(_event, _context: "ExtensionContext") -> None:
+        if not host_session_started:
+            return
         reporter.schedule_idle(outcome=run_outcome)
 
     @tau.on("session_shutdown")
     async def _on_session_shutdown(event, _context: "ExtensionContext") -> None:
+        nonlocal host_session_started
+        if not host_session_started:
+            return
+        host_session_started = False
         await reporter.shutdown(release=event.reason == "quit")
 
     def _herdr_command(_args: str, _context: "ExtensionCommandContext") -> str:

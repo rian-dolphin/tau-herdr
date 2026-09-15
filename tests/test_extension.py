@@ -14,10 +14,10 @@ from pathlib import Path
 import pytest
 
 from tau_agent.events import AgentStartEvent, MessageEndEvent
-from tau_agent.messages import AssistantMessage
+from tau_agent.messages import AssistantMessage, Usage
 from tau_coding import TauResourcePaths
 from tau_coding.events import AgentSettledEvent, SessionInfoChangedEvent
-from tau_coding.extensions import ExtensionRuntime
+from tau_coding.extensions import ExtensionRuntime, TurnEndEvent
 
 pytestmark = pytest.mark.anyio
 
@@ -165,6 +165,38 @@ async def test_process_claims_ownership_for_descendants(
     await runtime.emit_session_start("startup")
     await runtime.emit_session_shutdown("reload")
     assert fake_herdr.requests_for("pane.report_agent") != []
+
+
+async def test_in_process_child_without_session_start_stays_dormant(
+    tmp_path, monkeypatch, fake_herdr
+):
+    # tau-subagents loads extensions into child CodingSessions in the parent
+    # process. Those runtimes share the owner PID and pane environment, but
+    # hosts never activate them with session_start.
+    runtime = _load_runtime(
+        tmp_path,
+        monkeypatch,
+        socket_path=fake_herdr.socket_path,
+        extra_env={"TAU_HERDR_OWNER_PID": str(os.getpid())},
+    )
+    await runtime.emit_event(AgentStartEvent())
+    await runtime.emit_event(
+        TurnEndEvent(
+            turn_index=0,
+            message=AssistantMessage(model="child", usage=Usage(input=10_000)),
+            tool_results=[],
+        )
+    )
+    await runtime.emit_event(SessionInfoChangedEvent(name="Child session"))
+    await runtime.emit_event(
+        MessageEndEvent(message=AssistantMessage(stop_reason="error"))
+    )
+    await runtime.emit_event(AgentSettledEvent())
+    await asyncio.sleep(0.02)
+    await runtime.emit_session_shutdown("quit")
+
+    assert runtime.diagnostics == ()
+    assert fake_herdr.requests == []
 
 
 async def test_reports_state_sequence(tmp_path, monkeypatch, fake_herdr):
